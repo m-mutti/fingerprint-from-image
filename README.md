@@ -25,11 +25,15 @@ python fingerprint_extraction.py <path_to_image>
 
 where `<path_to_image>` is the path to the image file that you want to process. The extracted fingerprints will be displayed on the screen.
 
+## Sample Input
+
+The input should look something like this:
+
 ## Results
 
 The program will display the original image and the extracted fingerprints. The output should look something like this:
 
-![Sample Output](sample_output.jpg)
+![Sample Input](sample_input.jpg)
 
 ## Contributing
 
