@@ -29,11 +29,13 @@ where `<path_to_image>` is the path to the image file that you want to process. 
 
 The input should look something like this:
 
+![Sample Input](sample_input.jpg)
+
 ## Results
 
 The program will display the original image and the extracted fingerprints. The output should look something like this:
 
-![Sample Input](sample_input.jpg)
+![Sample Output](sample_output.jpg)
 
 ## Contributing
 
