@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Returning the concrete class keeps the public API compatible with Python 3.10,
+# where typing.Self is not part of the standard library.
+ignore = ["PYI034"]
