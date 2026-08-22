@@ -1,0 +1,4 @@
+numpy>=1.26
+opencv-python>=4.8
+matplotlib>=3.8
+
