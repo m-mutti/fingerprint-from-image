@@ -94,6 +94,7 @@ def quantize_static(src: Path, dst: Path, calib: np.ndarray, method: str) -> Non
         str(pre), str(dst), _Reader(calib, "input"), quant_format=QuantFormat.QDQ,
         per_channel=True, weight_type=QuantType.QInt8, activation_type=QuantType.QUInt8,
         calibrate_method=getattr(CalibrationMethod, method),
+        op_types_to_quantize=["Conv", "MatMul", "Gemm"],  # keep LayerNorm/GRN/GELU in float
         extra_options={"CalibMovingAverage": method == "MinMax"},
     )
     pre.unlink(missing_ok=True)

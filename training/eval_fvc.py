@@ -152,6 +152,24 @@ def _tflite_embed(path: Path, threads: int) -> EmbedFn:
     return embed
 
 
+def with_tta(embed: EmbedFn, angles: Sequence[float]) -> EmbedFn:
+    """Average unit embeddings over rotated copies of each input (rotation TTA)."""
+
+    from fingerprint_from_image.embedding.preprocess import rotate_input
+
+    def wrapped(x: np.ndarray) -> np.ndarray:
+        total = None
+        for angle in angles:
+            rotated = x if angle == 0 else np.stack(
+                [rotate_input(img[0], angle) for img in x])[:, None]
+            emb = embed(np.ascontiguousarray(rotated))
+            emb = emb / np.linalg.norm(emb, axis=1, keepdims=True)
+            total = emb if total is None else total + emb
+        return total / np.linalg.norm(total, axis=1, keepdims=True)
+
+    return wrapped
+
+
 def latency(embed: EmbedFn, size: int, *, batch: int = 1, repeats: int = 20) -> float:
     """Median milliseconds per image for ``embed`` on random inputs."""
 
@@ -199,6 +217,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--latency", action="store_true", help="also time CPU embedding")
     parser.add_argument("--json", type=Path)
+    parser.add_argument("--tta", type=float, nargs="*", default=None,
+                        help="rotation angles for test-time augmentation, e.g. 0 -10 10")
     args = parser.parse_args(argv)
 
     sets = [s for group_name in args.sets for s in FVC_GROUPS.get(group_name, [group_name])]
@@ -209,6 +229,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         embed = _onnx_embed(args.onnx, args.threads)
     else:
         embed = _tflite_embed(args.tflite, args.threads)
+    if args.tta:
+        embed = with_tta(embed, args.tta)
     results: dict[str, object] = dict(evaluate_sets(embed, sets, naive=naive))
     print(_format(results))  # noqa: T201 - CLI output
     if args.latency:

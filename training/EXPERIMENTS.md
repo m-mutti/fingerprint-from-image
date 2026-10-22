@@ -31,20 +31,22 @@ shared by training cache, evaluation and runtime). Training adds ±0.3 log-scale
 
 Estimator robustness (vision-QA finding: ~5.5 % of SOCOFing images, mostly Altered-Obl,
 got 10–24 px and shrank to a blob). Variants compared on SOCOFing train images
-(every 4th Real, every 12th Altered) and all FVC images
-(`scratchpad/period_eval.py`; fail = estimate > 4.5 px on SOCOFing):
+(every 4th Real, every 12th Altered) and FVC2000+FVC2002 DB_B (8 sets × 10 fingers × 8
+impressions); fail = estimate > 4.5 px on SOCOFing; FVC columns = mean within-finger
+relative std and 95th percentile of the per-finger max/min ratio.
+`python -m training.period_study --no-2004`:
 
 | estimator | SOCOFing Real fail | SOCOFing Altered fail | FVC within-finger rel. std | FVC p95 max/min ratio |
 |---|---|---|---|---|
-| global spectrum (v1) | 1.25 % | 6.79 % | 0.061 | 1.49 |
-| global + size prior (≥ 20 ridges across the long side) | 0.92 % | 1.00 % | 0.061 | 1.47 |
-| **Welch (unit-energy block spectra) + size prior (adopted)** | **0.75 %** | **0.88 %** | **0.045** | **1.33** |
-| Welch without prior | 1.83 % | 6.67 % | 0.042 | 1.28 |
+| global spectrum (v1) | 1.25 % | 6.79 % | 0.055 | 1.43 |
+| global + size prior (≥ 20 ridges across the long side) | 0.92 % | 1.00 % | 0.057 | 1.43 |
+| **Welch (unit-energy block spectra) + size prior (adopted)** | **0.75 %** | **0.88 %** | 0.037 | 1.29 |
+| Welch without prior | 1.83 % | 6.67 % | 0.033 | 1.24 |
 
-The choice is made on SOCOFing and FVC2000/2002 behaviour. Disclosure: the FVC rows
-above pooled all 12 FVC sets including FVC2004; a post-hoc look showed two FVC2004 DB2
-impressions where Welch picks a 2× sub-harmonic (17.5 vs 8.5 px). The estimator was **not**
-changed in response. In addition, SOCOFing Altered images (pixel-aligned edits of their
+The choice uses SOCOFing and FVC2000/2002 only. Disclosure: an earlier scratch run of the
+same comparison pooled all 12 FVC sets (incl. FVC2004) and gave the same ranking; it also
+showed two FVC2004 DB2 impressions where Welch picks a 2× sub-harmonic (17.5 vs 8.5 px).
+The estimator was **not** changed in response. In addition, SOCOFing Altered images (pixel-aligned edits of their
 Real image) inherit the Real image's period in the training cache, and uniform
 sensor-frame bars are trimmed before estimation (`trim_uniform_border`).
 

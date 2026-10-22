@@ -9,7 +9,8 @@ Runs under WSL2 Linux (``ai-edge-litert`` has no Windows wheels); point
 
 Variants: ``fp32`` (litert-torch), ``fp16`` (FP16 weights via float casting, FP32
 compute), ``int8_dynamic`` (INT8 weights, FP32 activations), ``int8_static``
-(INT8 weights + activations, calibrated on training-split images only). Each is
+(INT8 weights + activations) and ``int8_static_a16`` (INT8 weights, INT16
+activations), both calibrated on training-split images only. Each is
 checked for parity against PyTorch FP32 on held-out FVC2002 images, timed on CPU
 and evaluated on FVC2004 DB1-4 B.
 """
@@ -130,6 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("litert_fp16", _FP16_RECIPE, None),
         ("litert_int8_dynamic", recipe.dynamic_wi8_afp32(), None),
         ("litert_int8_static", recipe.static_wi8_ai8(), calib),
+        ("litert_int8_static_a16", recipe.static_wi8_ai16(), calib),
     ):
         path = args.out / f"{args.prefix}_{name}.tflite"
         if args.reuse and path.is_file():

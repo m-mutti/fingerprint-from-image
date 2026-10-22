@@ -34,6 +34,7 @@ __all__ = [
     "prepare",
     "preprocess",
     "rescale_to_period",
+    "rotate_input",
     "soft_mask",
     "trim_uniform_border",
 ]
@@ -274,3 +275,15 @@ def preprocess(gray: np.ndarray, size: int = INPUT_SIZE) -> np.ndarray:
     prepared = prepare(gray)
     window = crop_around(prepared.image, prepared.center, size, prepared.background)
     return normalize_intensity(window)
+
+
+def rotate_input(window: np.ndarray, angle: float) -> np.ndarray:
+    """Rotate a normalised model input about its centre (bilinear, background = 0).
+
+    Used for optional rotation test-time augmentation; positive angles are
+    counter-clockwise.
+    """
+
+    image = Image.fromarray(np.asarray(window, dtype=np.float32))
+    rotated = image.rotate(angle, resample=Image.Resampling.BILINEAR, fillcolor=0.0)
+    return np.asarray(rotated, dtype=np.float32)

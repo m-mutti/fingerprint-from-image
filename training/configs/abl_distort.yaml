@@ -1,0 +1,8 @@
+# Ablation: stronger impression distortion (elastic, translation, partial contact).
+name: abl_distort
+aug:
+  elastic: 0.07
+  translate: 0.2
+  partial: 0.5
+optim:
+  epochs: 10

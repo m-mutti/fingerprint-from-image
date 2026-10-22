@@ -1,0 +1,7 @@
+# Ablation: spatial ArcFace-style head (BN2d -> dropout -> flatten -> FC -> BN) instead of pooling.
+name: abl_flatten
+model:
+  head: flatten
+  dropout: 0.4
+optim:
+  epochs: 10
