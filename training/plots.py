@@ -40,18 +40,20 @@ def _steps(records: list[dict], out: Path) -> None:
 
 
 def _val(records: list[dict], out: Path) -> None:
-    epochs = [r for r in records if r.get("kind") == "epoch" and "val_fvc2002" in r]
+    epochs = [r for r in records if r.get("kind") == "epoch" and "val" in r]
     if not epochs:
         return
     x = [r["epoch"] for r in epochs]
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(x, [r["val_fvc2002"]["eer_all"] for r in epochs], "o-", label="FVC2002 EER (all)")
-    ax.plot(x, [r["val_fvc2002"]["eer_fvc"] for r in epochs], "s--", label="FVC2002 EER (fvc)")
-    if "val_soco_eer" in epochs[0]:
-        ax.plot(x, [r["val_soco_eer"] for r in epochs], "^-", label="SOCOFing-val EER")
-    ax.set(xlabel="epoch", ylabel="EER %", title="validation EER", yscale="log")
-    ax.grid(alpha=0.3)
-    ax.legend()
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(x, [r["val"]["select"] for r in epochs], "k-o", lw=2.5,
+            label="selection (contact FVC + neurotech)")
+    for name in epochs[-1]["val"]["sets"]:
+        ax.plot(x, [r["val"]["sets"].get(name, {}).get("eer", np.nan) for r in epochs],
+                lw=1, label=name)
+    ax.set(xlabel="epoch", ylabel="all-pairs EER %", title="validation EER (manifest val ids)",
+           yscale="log")
+    ax.grid(alpha=0.3, which="both")
+    ax.legend(fontsize=7, ncol=2)
     fig.tight_layout()
     fig.savefig(out / "val_eer.png", dpi=110)
     plt.close(fig)
@@ -66,14 +68,16 @@ def _det(scores: dict[str, dict[str, np.ndarray]], out: Path) -> None:
     bins = np.linspace(-0.5, 1.0, 76)
     axes[0].hist(impostor, bins=bins, alpha=0.6, density=True, label="impostor")
     axes[0].hist(genuine, bins=bins, alpha=0.6, density=True, label="genuine")
-    axes[0].set(title="FVC2002 cosine scores (all sets)", xlabel="cosine")
+    axes[0].set(title="val cosine scores (selection sets)", xlabel="cosine")
     axes[0].legend()
     for name, s in scores.items():
-        thresholds = np.unique(np.concatenate([s["genuine"], s["impostor"]]))
-        fmr = [(s["impostor"] >= t).mean() for t in thresholds]
-        fnmr = [(s["genuine"] < t).mean() for t in thresholds]
-        axes[1].plot(np.clip(fmr, 1e-4, 1), np.clip(fnmr, 1e-4, 1), label=name)
-    axes[1].set(xscale="log", yscale="log", xlabel="FMR", ylabel="FNMR", title="DET (FVC2002)")
+        gen, imp = np.sort(s["genuine"]), np.sort(s["impostor"])
+        thresholds = np.linspace(-1.0, 1.0, 401)
+        fmr = 1.0 - np.searchsorted(imp, thresholds, side="left") / len(imp)
+        fnmr = np.searchsorted(gen, thresholds, side="left") / len(gen)
+        axes[1].plot(np.clip(fmr, 1e-5, 1), np.clip(fnmr, 1e-5, 1), label=name)
+    axes[1].set(xscale="log", yscale="log", xlabel="FMR", ylabel="FNMR",
+                title="DET (selection val sets)")
     axes[1].grid(alpha=0.3, which="both")
     axes[1].legend(fontsize=8)
     fig.tight_layout()

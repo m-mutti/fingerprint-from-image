@@ -1,0 +1,6 @@
+# Manifest ablation M1 (a): + full FVC2000/2002 (DB_A + DB_B train identities, 800 fingers).
+name: m1_fvcfull
+data:
+  manifest_train: {SOCOFing: 0.5, FVC2000: 0.25, FVC2002: 0.25}
+optim:
+  epochs: 8

@@ -1,0 +1,6 @@
+# Manifest ablation M4: M1 + TDFD (320 ids x 2, large-distortion pairs).
+name: m4_tdfd
+data:
+  manifest_train: {SOCOFing: 0.45, FVC2000: 0.225, FVC2002: 0.225, TDFD: 0.1}
+optim:
+  epochs: 8

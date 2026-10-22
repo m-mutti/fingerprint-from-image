@@ -45,7 +45,7 @@ def global_spectrum(gray: np.ndarray, prior: bool = False) -> float:
 
     g = gray.astype(np.float32)
     h, w = g.shape
-    max_period = min(pp.MAX_PERIOD, max(h, w) / 20.0) if prior else pp.MAX_PERIOD
+    max_period = min(pp.MAX_PERIOD, max(h, w) / pp._MIN_RIDGES) if prior else pp.MAX_PERIOD
     power = np.abs(np.fft.rfft2((g - g.mean()) * np.outer(np.hanning(h), np.hanning(w)))) ** 2
     return _peak(power, h, w, max_period)
 

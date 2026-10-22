@@ -1,8 +1,9 @@
 """Train a fingerprint embedder with a margin loss and GPU acquisition augmentation.
 
-Model selection uses FVC2002 DB1-4 B (mean EER over all impostor pairs); a
-SOCOFing subject-disjoint validation score is logged alongside. FVC2004 is never
-touched here; evaluate it afterwards with ``python -m training.eval_fvc``.
+Model selection uses the shared manifests' ``val`` identities: mean all-pairs EER over
+contact FVC2000/2002 DB1-3 (fingers 101-110) and neurotech; per-sensor EERs (incl.
+FVC DB4, l3sf, SOCOFing) are logged. FVC2004 is never touched here; evaluate it
+afterwards with ``python -m training.eval_fvc``.
 
 Usage::
 
@@ -26,23 +27,11 @@ from timm.utils import ModelEmaV3
 
 from training.augment import Augmenter
 from training.config import TrainConfig, load_config
-from training.data import (
-    Sample,
-    build_cache,
-    fvc_samples,
-    load_gray,
-    model_input,
-    socofing_samples,
-    split_from_file,
-    split_socofing,
-)
-from training.dedup import dedup_socofing, duplicate_groups
-from training.eval_fvc import evaluate_sets
+from training.data import build_cache
 from training.losses import MarginLoss
-from training.metrics import verification_metrics
 from training.model import EmbeddingNet
 from training.plots import write_plots
-from training.synth import synthetic_samples
+from training.sources import gather, sampling_weights
 from training.train_utils import (
     GpuMonitor,
     cosine_lr,
@@ -52,66 +41,9 @@ from training.train_utils import (
     set_seed,
     setup_logging,
 )
+from training.validate import Validator
 
 logger = logging.getLogger("training.train")
-
-
-def _gather(cfg: TrainConfig) -> tuple[list[Sample], list[Sample], dict]:
-    root = Path(cfg.data.data_root)
-    train: list[Sample] = []
-    soco_val: list[Sample] = []
-    stats: dict = {}
-    if cfg.data.socofing:
-        soco = socofing_samples(root, altered=cfg.data.socofing_altered)
-        if cfg.data.socofing_split_file:
-            parts = split_from_file(soco, Path(cfg.data.socofing_split_file))
-        else:
-            soco_train, soco_val = split_socofing(soco, cfg.data.socofing_val_subjects,
-                                                  cfg.data.split_seed)
-            parts = {"train": soco_train, "val": soco_val, "test": []}
-        if cfg.data.dedup_threshold is not None:
-            groups = duplicate_groups(soco, Path(cfg.data.cache_dir), cfg.data.dedup_threshold)
-            parts, stats = dedup_socofing(parts, groups)
-        train += parts["train"]
-        soco_val = parts["val"]  # parts["test"] is never used here
-    train += fvc_samples(root, cfg.data.fvc_train_sets)
-    if cfg.data.synthetic_dir:
-        train += synthetic_samples(Path(cfg.data.synthetic_dir))
-    return train, soco_val, stats
-
-
-def _weights(samples: list[Sample], cfg: TrainConfig) -> torch.Tensor:
-    """Per-image sampling weights so FVC / synthetic get fixed shares of each epoch."""
-
-    groups = np.array(["fvc" if s.source.startswith("FVC") else s.source for s in samples])
-    fixed = {"fvc": cfg.data.fvc_weight, "synthetic": cfg.data.synthetic_weight}
-    present = sorted(set(groups.tolist()))
-    free = [g for g in present if g not in fixed]
-    rest = max(0.0, 1.0 - sum(fixed[g] for g in present if g in fixed))
-    weights = np.zeros(len(samples))
-    for g in present:
-        share = fixed[g] if g in fixed else rest / len(free)
-        weights[groups == g] = share / (groups == g).sum()
-    return torch.from_numpy(weights)
-
-
-def _soco_val_inputs(samples: list[Sample], naive: bool) -> tuple[np.ndarray, np.ndarray, list]:
-    """Real images + Altered-Hard probes of the held-out SOCOFing validation subjects."""
-
-    chosen = [s for s in samples if "Real" in s.path or "Altered-Hard" in s.path]
-    inputs = np.stack([model_input(load_gray(s.path, s.source), naive=naive) for s in chosen])
-    is_real = np.array(["Real" in s.path for s in chosen])
-    return inputs[:, None].astype(np.float32), is_real, [s.label for s in chosen]
-
-
-def _soco_val_eer(embed, inputs: np.ndarray, is_real: np.ndarray, labels: list) -> float:
-    """EER of Altered-Hard probes vs the Real gallery (all probe × gallery pairs)."""
-
-    emb = embed(inputs)
-    lab = np.array(labels)
-    scores = emb[~is_real] @ emb[is_real].T
-    same = lab[~is_real][:, None] == lab[is_real][None, :]
-    return verification_metrics(scores[same], scores[~same]).eer
 
 
 def _optimizer(net: EmbeddingNet, criterion: MarginLoss, cfg: TrainConfig) -> torch.optim.AdamW:
@@ -158,8 +90,8 @@ def train(cfg: TrainConfig) -> Path:
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision("high")
 
-    samples, soco_val, dedup_stats = _gather(cfg)
-    logger.info("SOCOFing duplicate handling: %s", dedup_stats)
+    samples, val_sets, data_stats = gather(cfg)
+    logger.info("data: %s", data_stats)
     classes = sorted({s.label for s in samples})
     class_index = {c: i for i, c in enumerate(classes)}
     labels = torch.tensor([class_index[s.label] for s in samples])
@@ -168,10 +100,9 @@ def train(cfg: TrainConfig) -> Path:
     canvases = torch.from_numpy(cache["canvases"])
     backgrounds = torch.from_numpy(cache["background"])
     boxes = torch.from_numpy(cache["valid_box"].astype(np.int64))
-    weights = _weights(samples, cfg)
-    logger.info("train images=%d classes=%d subjects=%d; soco-val images=%d subjects=%d",
-                len(samples), len(classes), len({s.subject for s in samples}), len(soco_val),
-                len({s.subject for s in soco_val}))
+    weights = sampling_weights(samples, cfg)
+    logger.info("train images=%d classes=%d; val sets=%s", len(samples), len(classes),
+                {k: len(v) for k, v in val_sets.items()})
 
     net = EmbeddingNet(cfg.model, cfg.input_size).to(device).to(memory_format=torch.channels_last)
     criterion = MarginLoss(cfg.loss, cfg.model.dim, len(classes)).to(device)
@@ -199,8 +130,7 @@ def train(cfg: TrainConfig) -> Path:
         if teacher_cfg.model.dim != cfg.model.dim:
             raise ValueError("student and teacher embedding dims must match")
 
-    val_cache: dict[str, np.ndarray] = {}
-    soco_inputs = _soco_val_inputs(soco_val, cfg.data.naive_resize) if soco_val else None
+    validator = Validator(val_sets, naive=cfg.data.naive_resize)
 
     @torch.no_grad()
     def embed(x: np.ndarray) -> np.ndarray:
@@ -269,21 +199,17 @@ def train(cfg: TrainConfig) -> Path:
         last = epoch + 1 == cfg.optim.epochs
         scores: dict[str, dict[str, np.ndarray]] = {}
         if (epoch + 1) % cfg.eval_every == 0 or last:
-            results = evaluate_sets(embed, cfg.data.fvc_val_sets, naive=cfg.data.naive_resize,
-                                    cache=val_cache, scores=scores)
-            record["val_fvc2002"] = results["mean"]
-            record["val_fvc2002_sets"] = {k: v["eer_all"] for k, v in results.items()}
-            if soco_inputs is not None:
-                record["val_soco_eer"] = _soco_val_eer(embed, *soco_inputs)
-            if results["mean"]["eer_all"] < best:
-                best = results["mean"]["eer_all"]
+            val, scores = validator(embed)
+            record["val"] = val
+            if val["select"] < best:
+                best = val["select"]
                 save_checkpoint(run_dir / "best.pt", ema.module, cfg,
-                                {"epoch": epoch + 1, "val": results})
+                                {"epoch": epoch + 1, "val": val})
         logger.info(json.dumps(record))
         _append(log_path, record)
         write_plots(run_dir, scores or None)
         save_checkpoint(run_dir / "last.pt", ema.module, cfg, {"epoch": epoch + 1})
-    logger.info("best FVC2002 mean EER(all) = %.3f%%", best)
+    logger.info("best val selection EER = %.3f%%", best)
     return run_dir
 
 

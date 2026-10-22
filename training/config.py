@@ -30,6 +30,9 @@ class DataConfig:
     """Which images to train on and how to split them."""
 
     data_root: str = str(ROOT / "data")
+    manifest_dir: str = str(ROOT / "data" / "manifests")
+    # manifest mode: {manifest group: share of each epoch}, e.g. {"SOCOFing": 0.5, "FVC2000": 0.25}
+    manifest_train: dict[str, float] | None = None
     cache_dir: str = str(ROOT / "runs" / "embedder" / "cache")
     socofing: bool = True
     socofing_altered: bool = True

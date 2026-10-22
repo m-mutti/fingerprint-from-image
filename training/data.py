@@ -21,6 +21,7 @@ import numpy as np
 from PIL import Image
 
 from fingerprint_from_image.embedding import preprocess as pp
+from fingerprint_from_image.io import load_image
 
 __all__ = [
     "Sample",
@@ -49,11 +50,10 @@ class Sample:
 
 
 def load_gray(path: str, source: str) -> np.ndarray:
-    """Load a grayscale uint8 image; strips the SOCOFing acquisition frame."""
+    """Load a grayscale uint8 image (16-bit/LA/RGBA handled); strips the SOCOFing frame."""
 
-    with Image.open(path) as handle:
-        gray = np.asarray(handle.convert("L"), dtype=np.uint8)
-    if source == "socofing":
+    gray = load_image(path, mode="L")
+    if source.lower() == "socofing":
         top, bottom = _SOCO_TRIM
         gray = gray[top:-bottom, top:-bottom]
     return gray
@@ -173,7 +173,7 @@ def build_cache(
     """
 
     key = hashlib.sha1(json.dumps(
-        [[s.path for s in samples], canvas, naive, pp.TARGET_PERIOD, "v2-welch-realperiod"]
+        [[s.path for s in samples], canvas, naive, pp.TARGET_PERIOD, "v3-prior16"]
     ).encode()).hexdigest()[:16]
     path = cache_dir / f"canvas_{key}.npz"
     if path.is_file():
@@ -182,16 +182,16 @@ def build_cache(
     cache_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Building canvas cache for %d images -> %s", len(samples), path)
     real = {Path(s.path).stem: s for s in samples
-            if s.source == "socofing" and "/Real/" in s.path.replace("\\", "/")}
+            if s.source.lower() == "socofing" and "/Real/" in s.path.replace("\\", "/")}
     with ProcessPoolExecutor(max_workers=workers) as pool:
         real_periods = dict(zip(real, pool.map(
             _period_one, [(s.path, s.source) for s in real.values()], chunksize=64), strict=True))
         jobs = []
         for s in samples:
             inherited = None
-            if s.source == "socofing" and "/Altered/" in s.path.replace("\\", "/"):
+            if s.source.lower() == "socofing" and "/Altered/" in s.path.replace("\\", "/"):
                 inherited = real_periods.get(_real_counterpart(s.path))
-            elif s.source == "socofing":
+            elif s.source.lower() == "socofing":
                 inherited = real_periods.get(Path(s.path).stem)
             jobs.append((s.path, s.source, canvas, naive, inherited))
         results = list(pool.map(_canvas_one, jobs, chunksize=64))

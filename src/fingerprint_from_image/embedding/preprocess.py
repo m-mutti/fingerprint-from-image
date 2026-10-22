@@ -48,6 +48,7 @@ MIN_SCALE, MAX_SCALE = 0.2, 4.0
 _ABS_STD_FLOOR = 4.0  # block std (0..255 units) below which a block is background
 _REL_STD = 0.3  # block is foreground if std > _REL_STD * 90th percentile
 _MAX_FFT_SIDE = 1024
+_MIN_RIDGES = 16.0  # size prior: a print spans at least this many ridges on its long side
 
 
 @dataclass(frozen=True)
@@ -97,8 +98,9 @@ def estimate_ridge_period(gray: np.ndarray) -> float:
     votes equally and large blotches (obliterations, smudges) cannot dominate.
     Energy is accumulated in 64 log-spaced radial bands between
     ``1/max_period`` and ``1/MIN_PERIOD``; the peak band is refined by an
-    energy-weighted mean in log-frequency. Prior: a print spans at least ~20
-    ridges along its longer side, so ``max_period = min(MAX_PERIOD, side/20)``.
+    energy-weighted mean in log-frequency. Prior: a print spans at least
+    ``_MIN_RIDGES`` (16) ridges along its longer side, so
+    ``max_period = min(MAX_PERIOD, side / 16)``.
     """
 
     image = _as_float_gray(gray)
@@ -106,7 +108,7 @@ def estimate_ridge_period(gray: np.ndarray) -> float:
     if step > 1:  # very large inputs: subsample (period is rescaled below)
         image = image[::step, ::step]
     min_period = max(MIN_PERIOD / step, 2.05)
-    max_period = max(min(MAX_PERIOD / step, max(image.shape) / 20.0), 1.5 * min_period)
+    max_period = max(min(MAX_PERIOD / step, max(image.shape) / _MIN_RIDGES), 1.5 * min_period)
     blocks, side = _welch_blocks(image)
     window = np.outer(np.hanning(side), np.hanning(side)).astype(np.float32)
     n = 2 * side
