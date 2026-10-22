@@ -21,7 +21,7 @@
   <br>
   <img alt="Triton" src="https://img.shields.io/badge/kernels-Triton%20%7C%20CUDA-76B900?style=flat-square&logo=nvidia&logoColor=white">
   <img alt="Optimized" src="https://img.shields.io/badge/optimized-INT8%20%7C%20FP16%20%7C%20distilled-8B5CF6?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-54%20passing-14B8A6?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-99%20passing-14B8A6?style=flat-square">
   <img alt="Ruff" src="https://img.shields.io/badge/lint-ruff-D7FF64?style=flat-square&logo=ruff&logoColor=black">
   <a href="docs/ROADMAP.md"><img alt="Roadmap" src="https://img.shields.io/badge/roadmap-v3-6366F1?style=flat-square"></a>
 </p>
@@ -181,7 +181,7 @@ only, never on the test set.
 | Brand system and animated pipeline | `assets/`, `scripts/make_*.py` | ✅ |
 | Training-throughput engineering (Triton / CUDA) | `training/` | 🧪 |
 | Deep fingerprint embedding + ONNX / LiteRT export | `fingerprint_from_image.embedding`, `training/` | 🧪 |
-| Learned hand / fingertip detector | `fingerprint_from_image.hand` | 🧪 |
+| Learned hand / fingertip detector (MediaPipe → ONNX, Apache-2.0) | `fingerprint_from_image.hand` | ✅ <sub>model hosting pending</sub> |
 | Benchmark harness + SOTA comparison | `fingerprint_from_image.evaluation`, `benchmarks/` | 🧪 |
 | Classical RootSIFT pipeline (baseline) | `FingerprintMatcher`, CLI | ✅ |
 
@@ -338,7 +338,7 @@ flowchart TD
 - [ ] Training-throughput engineering (Triton / CUDA), currently running
 - [ ] Deep embedding model, cross-sensor results on FVC2004, model card
 - [ ] ONNX / LiteRT exports with INT8, FP16 and distillation, plus parity tests
-- [ ] Learned hand-landmark fingertip detector for phone photos
+- [x] Learned hand-landmark fingertip detector for phone photos ([details](src/fingerprint_from_image/hand/README.md))
 - [ ] Benchmark harness, classical and SourceAFIS baselines, published-SOTA comparison
 - [ ] `fingerprint` v3 CLI, hosted model weights, interactive demo
 
@@ -352,6 +352,7 @@ Details and principles: [docs/ROADMAP.md](docs/ROADMAP.md).
 | [ROADMAP.md](docs/ROADMAP.md) | phases, status, datasets and licences |
 | [CLASSIC.md](docs/CLASSIC.md) | full manual for the classical CLI, JSON output and Python API |
 | [brand.md](docs/brand.md) | palette, typography, motion rules, asset usage |
+| [hand/README.md](src/fingerprint_from_image/hand/README.md) | fingertip detector: algorithm, capture requirements, limitations |
 
 ## 🗂️ Project layout
 
@@ -360,7 +361,7 @@ src/fingerprint_from_image/
 ├── io.py · types.py · models.py     image I/O, FingerCrop, verified model cache
 ├── recognition/                     schema-v4 embedding gallery + recognizer
 ├── embedding/                       ONNX fingerprint embedder           (in progress)
-├── hand/                            hand-landmark fingertip detector    (in progress)
+├── hand/                            hand-landmark fingertip detector (ONNX)
 ├── evaluation/                      biometric protocols and metrics     (in progress)
 ├── extraction.py · features.py · pairwise.py · matcher.py · store.py   classical v2
 └── cli/                             fingerprint-extract · fingerprint-match
@@ -374,7 +375,7 @@ tests/           fast unit tests (synthetic data and stand-in models)
 ## 🧪 Development
 
 ```bash
-python -m pytest                      # 54 tests; synthetic data, stand-in models, runs in seconds
+python -m pytest                      # 99 tests; synthetic data, stand-in models, runs in seconds
 ruff check .                          # lint
 python scripts/make_brand_assets.py   # regenerate every logo and animation deterministically
 ```
