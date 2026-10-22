@@ -3,7 +3,7 @@
 Runs the same FVC protocol, metrics and output format as ``fingerprint-bench``,
 with SourceAFIS 3.14.0 doing template extraction and matching through the
 small driver in ``sourceafis_dotnet/`` (built on first use with
-``dotnet build -c Release``; requires the .NET SDK >= 8).
+``dotnet build -c Release``; requires the .NET SDK >= 10).
 
 Images are decoded by Pillow and handed to SourceAFIS as raw 8-bit grayscale
 with each database's nominal DPI (``FVC_DPI``), so SourceAFIS's own image
