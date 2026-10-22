@@ -39,6 +39,7 @@ dev = [
 [project.scripts]
 fingerprint-match = "fingerprint_from_image.cli.match:main"
 fingerprint-extract = "fingerprint_from_image.cli.extract:main"
+fingerprint-bench = "fingerprint_from_image.evaluation.runner:main"
 
 [project.urls]
 Homepage = "https://github.com/m-mutti/fingerprint-from-image"

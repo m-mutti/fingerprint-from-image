@@ -182,7 +182,7 @@ only, never on the test set.
 | Training-throughput engineering (Triton / CUDA) | `training/` | 🧪 |
 | Deep fingerprint embedding + ONNX / LiteRT export | `fingerprint_from_image.embedding`, `training/` | 🧪 |
 | Learned hand / fingertip detector (MediaPipe → ONNX, Apache-2.0) | `fingerprint_from_image.hand` | ✅ <sub>model hosting pending</sub> |
-| Benchmark harness + SOTA comparison | `fingerprint_from_image.evaluation`, `benchmarks/` | 🧪 |
+| Benchmark harness (`fingerprint-bench`) + verified SOTA comparison | `fingerprint_from_image.evaluation`, `benchmarks/` | ✅ |
 | Classical RootSIFT pipeline (baseline) | `FingerprintMatcher`, CLI | ✅ |
 
 <sub>✅ on <code>main</code> and tested · 🧪 in training or development</sub>
@@ -285,17 +285,24 @@ flowchart LR
 | **CMC rank-1 / 5** | identification accuracy in a gallery search |
 | **FTE, latency** | failure-to-enrol rate; ms per template and µs per comparison |
 
-**Results (held-out FVC2004 DB_B)**
+**Results on held-out FVC2004 DB_B** (EER over all 2,880 impostor pairs; lower is better)
 
-| Method | DB1 EER | DB2 EER | DB3 EER | DB4 EER | Avg FMR1000 |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Classical v2 (RootSIFT + RANSAC) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| SourceAFIS (open-source minutiae matcher) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| **Learned v3 (this repo)** | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| Published SOTA (verified sources) | see `benchmarks/SOTA.md` | | | | |
+| Method | DB1 | DB2 | DB3 | DB4 | **Avg EER** | Avg FMR1000 | Rank-1 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Classical v2 (RootSIFT + RANSAC) | 44.56 % | 40.47 % | 12.23 % | 44.22 % | **35.37 %** | 66.52 % | 44.3 % |
+| SourceAFIS 3.14 (open-source minutiae matcher) | 9.29 % | 12.50 % | 5.36 % | 4.64 % | **7.95 %** | 15.18 % | 92.5 % |
+| **Learned v3 (this repo)** | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 
-<sub>⏳ the run is in progress. Numbers appear here only after they are measured,
-with the exact command in <code>benchmarks/RESULTS.md</code>.</sub>
+<sub>Measured with <code>fingerprint-bench</code> and <code>benchmarks/comparators/sourceafis.py</code>; per-set results for
+all 12 FVC2000/2002/2004 DB_B sets, latency and failure-to-enrol rates are in
+<a href="benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>. Each DB_B set has only 10 fingers, so
+per-set confidence intervals are wide; compare averages. ⏳ = training in progress.</sub>
+
+**Published state of the art** ([benchmarks/SOTA.md](benchmarks/SOTA.md), every number checked against its primary source):
+the best FVC2004 open-category EERs are 1.97 / 1.58 / 1.18 / 0.61 % (DB1–4). Deep
+fixed-length methods such as DeepPrint and AFR-Net report 97.5–100 % TAR at FAR = 0.1 %.
+Those numbers are on the larger **DB_A** sets with the official protocol, so they are
+targets, not like-for-like comparisons with the DB_B table above.
 
 ## ⚡ Edge deployment & optimization
 
@@ -339,7 +346,7 @@ flowchart TD
 - [ ] Deep embedding model, cross-sensor results on FVC2004, model card
 - [ ] ONNX / LiteRT exports with INT8, FP16 and distillation, plus parity tests
 - [x] Learned hand-landmark fingertip detector for phone photos ([details](src/fingerprint_from_image/hand/README.md))
-- [ ] Benchmark harness, classical and SourceAFIS baselines, published-SOTA comparison
+- [x] Benchmark harness, classical and SourceAFIS baselines, published-SOTA comparison
 - [ ] `fingerprint` v3 CLI, hosted model weights, interactive demo
 
 Details and principles: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -362,7 +369,7 @@ src/fingerprint_from_image/
 ├── recognition/                     schema-v4 embedding gallery + recognizer
 ├── embedding/                       ONNX fingerprint embedder           (in progress)
 ├── hand/                            hand-landmark fingertip detector (ONNX)
-├── evaluation/                      biometric protocols and metrics     (in progress)
+├── evaluation/                      biometric protocols, metrics, fingerprint-bench
 ├── extraction.py · features.py · pairwise.py · matcher.py · store.py   classical v2
 └── cli/                             fingerprint-extract · fingerprint-match
 training/        PyTorch training, Triton/CUDA optimization, ONNX/LiteRT export
