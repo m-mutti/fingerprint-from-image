@@ -316,7 +316,7 @@ need a signed licence.
 
 | Dataset | Identities | Images | Modality | Licence | Role |
 |---|---:|---:|---|---|---|
-| FVC2000 / FVC2002, DB1–4 full (A + B) | 880 | 7,036 | optical, capacitive, synthetic | research (© BioLab) | train / val |
+| FVC2000 / FVC2002, DB1–4 full (A + B) | 880 | 7,038 | optical, capacitive, synthetic | research (© BioLab) | train / val |
 | SOCOFing (duplicates merged) | 5,976 | 55,057 | optical, incl. altered | CC BY-NC-SA 4.0 | train / val / test |
 | L3SF | 740 | 7,400 | synthetic | CC BY 4.0 | train / val / test |
 | Mendeley family set | 1,363 | 1,363 | contact | CC BY 4.0 | train / val / test |
