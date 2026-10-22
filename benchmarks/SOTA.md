@@ -90,7 +90,7 @@ FMR = 0.1 %, i.e. 1 − FMR1000), not EER. None of the TAR rows below trained on
 | ↳ same | FVC2004 DB1–3_A | same | TAR@FAR=0.1 % | 98.64 / 98.29 / 97.50 | Table III |
 | ↳ VeriFinger SDK 12.0 (as reported by LDRF) | FVC2000 / 2002 / 2004 DB1–3_A | same | TAR@FAR=0.1 % | 99.89 / 99.96 / 99.50; 99.89 / 99.93 / 99.43; 98.93 / 97.79 / 99.86 | Table III |
 | **FLARE**: Pan, Guan, Duan, Feng, Zhou, "Fixed-Length Dense Fingerprint Representation" ([arXiv:2505.03597v1](https://arxiv.org/abs/2505.03597)) | FVC2002 DB3_A; FVC2004 DB1_A | 2,800 / 4,950 | TAR@FAR=0.1 % | 96.36 (FVC2002 DB3_A); 99.57 (FVC2004 DB1_A) | Table IV, p. 8 |
-| **IFViT**: Qiu et al., "IFViT: Interpretable Fixed-Length Representation for Fingerprint Matching via Vision Transformer" ([arXiv:2404.08237v1](https://arxiv.org/abs/2404.08237)) | FVC2004 DB1–3_A | **not FVC**: 7,750 test pairs per DB; **trained on FVC2002 DB1–3_A** | EER (%) | 1.87 / 1.83 / 1.49 (their DeepPrint re-impl. 2.70 / 3.39 / 2.05; AFRNet re-impl. 2.43 / 2.95 / 1.56) | Table IV, p. 10 |
+| **IFViT**: Qiu et al., "IFViT: Interpretable Fixed-Length Representation for Fingerprint Matching via Vision Transformer" ([arXiv:2404.08237v1](https://arxiv.org/abs/2404.08237)) | FVC2004 DB1–3_A | **not FVC**: 7,750 test pairs per DB; **trained on FVC2002 DB1–3_A plus NIST SD301a, SD302a and MOLF, after pretraining on 6.7M PrintsGAN images** (Sec. IV-A, Table I) | EER (%) | 1.87 / 1.83 / 1.49 (their DeepPrint re-impl. 2.70 / 3.39 / 2.05; AFRNet re-impl. 2.43 / 2.95 / 1.56) | Table IV, p. 10 |
 
 Caveats. LDRF and FLARE also list DeepPrint and AFRNet *re-implementations*
 trained on their own data. Those rows differ from the original papers and are
