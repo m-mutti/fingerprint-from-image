@@ -106,7 +106,7 @@
 ## 🔍 How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
     classDef input fill:#0F172A,stroke:#14B8A6,color:#F8FAFC,stroke-width:2px
     classDef model fill:#14B8A6,stroke:#0F766E,color:#042F2E,stroke-width:2px
     classDef data fill:#6366F1,stroke:#4338CA,color:#EEF2FF,stroke-width:2px
@@ -300,7 +300,7 @@ with the exact command in <code>benchmarks/RESULTS.md</code>.</sub>
 ## ⚡ Edge deployment & optimization
 
 ```mermaid
-flowchart LR
+flowchart TD
     classDef src fill:#EE4C2C,stroke:#9A2A16,color:#FFF7ED
     classDef fmt fill:#6366F1,stroke:#4338CA,color:#EEF2FF
     classDef gate fill:#F59E0B,stroke:#B45309,color:#1C1917
