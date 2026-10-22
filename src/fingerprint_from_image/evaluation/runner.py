@@ -37,7 +37,16 @@ from .metrics import verification_metrics as _verification
 from .protocols import ImpostorProtocol, fvc_pairs
 from .scorers import ClassicScorer, EmbeddingScorer, Scorer, load_embedder
 
-__all__ = ["SetResult", "format_markdown", "main", "run_benchmark", "run_fvc_set"]
+__all__ = [
+    "SetResult",
+    "average_row",
+    "environment_info",
+    "format_markdown",
+    "main",
+    "run_benchmark",
+    "run_fvc_set",
+    "summary_rows",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +195,7 @@ def _row(name: str, r: dict[str, Any]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
-def _summary_rows(results: Sequence[SetResult]) -> list[dict[str, Any]]:
+def summary_rows(results: Sequence[SetResult]) -> list[dict[str, Any]]:
     rows = []
     for result in results:
         row: dict[str, Any] = {
@@ -210,7 +219,7 @@ def _summary_rows(results: Sequence[SetResult]) -> list[dict[str, Any]]:
     return rows
 
 
-def _average(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+def average_row(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     keys = [k for k in rows[0] if k != "set" and all(k in row for row in rows)]
     return {"set": "Average", **{k: float(np.mean([row[k] for row in rows])) for k in keys}}
 
@@ -221,17 +230,17 @@ def format_markdown(rows: Sequence[dict[str, Any]], scorer_name: str) -> str:
     header = (
         f"### `{scorer_name}` on FVC DB_B (FVC protocol)\n\n"
         "| Set | FTE % | EER % (FVC imp.) | EER % (all imp.) | FMR100 % | FMR1000 % "
-        "| ZeroFMR % | Rank-1 % | Enrol ms/img | Compare µs/pair |\n"
+        "| ZeroFMR % | Rank-1 % | Enrol ms/img | Compare us/pair |\n"
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     )
     lines = [header, *(_row(row["set"], row) for row in rows)]
     if len(rows) > 1:
-        average = _average(rows)
+        average = average_row(rows)
         lines.append(_row("**Average**", average))
     return "\n".join(lines) + "\n"
 
 
-def _environment() -> dict[str, Any]:
+def environment_info() -> dict[str, Any]:
     from .. import __version__
 
     info: dict[str, Any] = {
@@ -288,15 +297,15 @@ def run_benchmark(
             (out / f"{label}_{set_name}.json").write_text(
                 json.dumps(payload, indent=1) + "\n", encoding="utf-8"
             )
-    rows = _summary_rows(results)
+    rows = summary_rows(results)
     markdown = format_markdown(rows, label)
     if out is not None:
         summary = {
             "scorer": scorer.describe(),
-            "environment": _environment(),
+            "environment": environment_info(),
             "impostor_protocol": impostor,
             "sets": rows,
-            "average": _average(rows) if rows else None,
+            "average": average_row(rows) if rows else None,
         }
         (out / f"{label}_summary.json").write_text(
             json.dumps(summary, indent=1) + "\n", encoding="utf-8"
