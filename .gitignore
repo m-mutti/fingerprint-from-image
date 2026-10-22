@@ -19,3 +19,6 @@ runs/
 dist/
 build/
 *.egg-info/
+
+# Claude Code local state (agent worktrees)
+.claude/
