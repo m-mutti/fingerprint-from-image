@@ -167,3 +167,29 @@ p / (1 + p) (e.g. FVC2000 DB1: p = 0.225 → 18.37 %), and it fails completely o
 FVC2002 DB4 (100 % of genuine scores are 0) and FVC2000 DB4 (99.6 %). Read its EER as
 an interval [0, p] and prefer FMR1000 / ZeroFMR when comparing against it. All 48
 reported EERs (24 runs × 2 impostor protocols) were independently recomputed and match.
+
+## Evaluation protocol v1 (frozen 2026-10-22)
+
+Adopted from the leakage/protocol audit (`docs/reviews/2026-10-22-protocol-leakage-audit.md`).
+
+- **Primary test:** mean EER over **FVC2004 DB1–4 full** (110 fingers × 8 impressions per DB),
+  FVC impostor protocol, with a finger-level bootstrap 95 % CI; paired bootstrap difference vs
+  SourceAFIS. Also reported: FMR1000 (all impostors), DB_A-only EER (comparable with published
+  DB_A results), and FVC2004 DB_B for continuity — always with CIs.
+- **Test hygiene:** FVC2004 is evaluated only on frozen release candidates and never informs a
+  decision (selection, thresholds, quantisation, ablations). The leakage audit found 0 exact and
+  0 near-duplicate FVC2004 images among 111,592 training-side images.
+- **Selection:** manifest val identities only. Both our model and the reproduced DeepPrint
+  baseline use the same manifests and the same selection rule.
+- FVC2000/2002 DB_B are now **validation** sets of sensors seen in training, so the earlier
+  12-set average is no longer a held-out figure.
+
+| Method | FVC2004 full mean EER | 95 % CI | DB_A-only mean EER | FVC2004 DB_B mean EER (all imp.) | 95 % CI |
+|---|---:|---:|---:|---:|---:|
+| SourceAFIS 3.14 | **10.29 %** | 9.17–11.44 | 10.41 % | 7.95 % | 5.17–10.83 |
+| Classic v2 (RootSIFT) | — | — | — | 35.37 % | 32.17–37.84 |
+
+SourceAFIS full-database scores were produced by the auditor's run on all 880 images per
+database (FTE 0); its DB_B subset reproduces the committed DB_B numbers (e.g. DB1 9.29 %).
+Per-DB full EERs: 11.82 / 9.68 / 13.25 / 6.40 %. Minimum resolvable difference at 95 %:
+≈ 1.6 points on FVC2004 full vs ≈ 4–4.7 points on DB_B.
