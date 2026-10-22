@@ -19,7 +19,11 @@
 </p>
 
 <p align="center">
-  <img src="assets/logo-animated.svg" alt="Animated fingerprint scan" width="160">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/pipeline-animated.svg">
+    <img src="assets/pipeline-animated-light.svg" width="800"
+         alt="Pipeline: a hand photo gets 21 learned landmarks and five upright fingertip crops; the index crop is enhanced, embedded as a unit vector, and matched against an enrolled gallery by cosine similarity.">
+  </picture>
 </p>
 
 ---
@@ -88,6 +92,8 @@ held-out set. Size, latency and accuracy for each variant will be published in
 ```
 
 Design contract and module interfaces: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Brand assets and usage rules: [docs/brand.md](docs/brand.md). The animation above is
+illustrative; real scores come from the benchmarks.
 
 ## Status
 
