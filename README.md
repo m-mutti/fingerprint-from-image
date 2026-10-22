@@ -6,14 +6,15 @@
 </p>
 
 <p align="center">
-  <b>Deep-learning fingerprint recognition from photos and scans: portable ONNX and TFLite models, no OpenCV.</b>
+  <b>Deep-learning fingerprint recognition from photos and scans, optimized for ONNX Runtime and LiteRT on server, mobile and edge.</b>
 </p>
 
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/python-3.10%E2%80%933.13-3776AB">
   <img alt="Deep learning" src="https://img.shields.io/badge/deep%20learning-PyTorch%20%E2%86%92%20ONNX-EE4C2C">
   <img alt="ONNX Runtime" src="https://img.shields.io/badge/runtime-ONNX%20Runtime-005CED">
-  <img alt="TFLite" src="https://img.shields.io/badge/edge-TFLite-FF6F00">
+  <img alt="LiteRT" src="https://img.shields.io/badge/edge-LiteRT%20(TFLite)-FF6F00">
+  <img alt="Optimized" src="https://img.shields.io/badge/optimized-INT8%20%7C%20FP16%20%7C%20distilled-8B5CF6">
   <a href="docs/ROADMAP.md"><img alt="Roadmap" src="https://img.shields.io/badge/roadmap-v3-14B8A6"></a>
 </p>
 
@@ -33,9 +34,10 @@ scan** into identity decisions:
 3. a **versioned SQLite gallery** stores vectors (never pixels), and
    identification is a single matrix product plus an evidence-aware decision rule.
 
-Everything at inference time runs on `numpy` + `Pillow` + `onnxruntime`.
-The same models export to **ONNX (FP32/INT8)** and **TFLite** for mobile and edge
-devices.
+Inference is a lean `numpy` + `Pillow` + `onnxruntime` stack. The same models
+ship as **ONNX (FP32/INT8)** and **LiteRT** (formerly TensorFlow Lite) for mobile
+and edge devices, with custom optimizations described
+[below](#edge-deployment-and-optimization).
 
 > [!IMPORTANT]
 > **v3 is under active development.** The recognizer, embedding store and
@@ -47,14 +49,33 @@ devices.
 
 ## Why deep learning
 
-| | Classical v2 (OpenCV) | Learned v3 |
+| | Classical v2 (hand-crafted) | Learned v3 |
 |---|---|---|
 | Finding fingers in a photo | HSV skin-colour thresholds; fails with lighting, skin tone and clutter; unstable `finger_N` labels | learned hand landmarks, so fingertips are located and labelled anatomically |
 | Ridge representation | adaptive thresholding + 1,600 RootSIFT keypoints | deep embedding trained for invariance to sensor, pressure, rotation and partial prints |
 | Comparison | RANSAC geometry for every pair (milliseconds) | cosine similarity (microseconds); one matrix product per gallery |
 | Template size | up to ≈ 830 KB of floats (1,600 × 130 float32) | ≤ 2 KB per finger (D ≤ 512 float32) |
-| Deployment | OpenCV + SIFT | ONNX Runtime anywhere; TFLite on Android/iOS/microcontrollers |
+| Deployment | CPU-only feature matching | ONNX Runtime (CPU/GPU/DirectML/CoreML) and LiteRT on Android, iOS and embedded |
 | Accuracy claims | none measured | measured on public benchmarks with a held-out protocol |
+
+## Edge deployment and optimization
+
+Models are trained in PyTorch, then optimized for each target rather than
+exported once and left alone:
+
+| Technique | What it does | Target |
+|---|---|---|
+| **Post-training INT8 quantization** (static, calibrated on fingerprint data) | ~4× smaller weights, integer kernels; accepted only if verification accuracy holds | ONNX Runtime, LiteRT |
+| **FP16 weights** | halves model size; accuracy impact verified by the parity check | LiteRT GPU delegate, mobile GPUs |
+| **Graph optimization** (operator fusion, constant folding, shape simplification) | fewer kernels and memory copies per inference | ONNX Runtime, LiteRT |
+| **Knowledge distillation** into a compact student backbone | keeps the large teacher's embedding geometry at a fraction of the compute | phones, embedded boards |
+| **Hardware delegates** (XNNPACK, GPU, NNAPI / Core ML) | runs on the fastest unit available | LiteRT, ONNX Runtime execution providers |
+| **Embedding-level optimization** (compact dimension, optional INT8 vectors) | smaller galleries and faster matrix search | the SQLite gallery |
+
+Every optimized export must pass a **parity check** against the PyTorch
+reference: cosine similarity ≥ 0.99, and benchmark EER re-measured on the
+held-out set. Size, latency and accuracy for each variant will be published in
+`benchmarks/RESULTS.md`.
 
 ## Pipeline
 
@@ -76,7 +97,7 @@ Design contract and module interfaces: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 | Model registry with SHA-256 verified cache | `fingerprint_from_image.models` | ✅ on `main` |
 | Embedding gallery, SQLite schema v4 | `fingerprint_from_image.recognition` | ✅ on `main` |
 | Recognizer: enroll / identify / verify | `fingerprint_from_image.recognition` | ✅ on `main` |
-| Deep fingerprint embedding model + ONNX/TFLite export | `fingerprint_from_image.embedding`, `training/` | 🧪 training |
+| Deep fingerprint embedding model + ONNX / LiteRT export | `fingerprint_from_image.embedding`, `training/` | 🧪 training |
 | Learned hand / fingertip detector (ONNX) | `fingerprint_from_image.hand` | 🧪 in development |
 | Benchmark harness (EER, FMR100/1000, CMC) + SOTA comparison | `fingerprint_from_image.evaluation`, `benchmarks/` | 🧪 in development |
 | Classic RootSIFT pipeline (baseline) | `fingerprint_from_image` (`FingerprintMatcher`) | ✅ stable |
@@ -146,14 +167,14 @@ published here until it has been measured.
 
 ```text
 src/fingerprint_from_image/
-  io.py, types.py, models.py   OpenCV-free foundations (image I/O, FingerCrop, model cache)
+  io.py, types.py, models.py   lightweight foundations (image I/O, FingerCrop, model cache)
   recognition/                 schema-v4 embedding gallery + recognizer (learned pipeline)
   embedding/                   ONNX fingerprint embedder                     (in progress)
   hand/                        ONNX hand-landmark fingertip detector          (in progress)
   evaluation/                  biometric protocols and metrics               (in progress)
   extraction.py, features.py, pairwise.py, matcher.py, store.py   classic v2 pipeline
   cli/                         fingerprint-extract and fingerprint-match
-training/                      PyTorch training, evaluation, ONNX/TFLite export
+training/                      PyTorch training, evaluation, ONNX / LiteRT export and optimization
 benchmarks/                    benchmark results and SOTA comparison
 scripts/                       reproducible dataset and brand-asset tooling
 docs/                          ARCHITECTURE, ROADMAP, CLASSIC manual

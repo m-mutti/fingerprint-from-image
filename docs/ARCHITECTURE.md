@@ -1,4 +1,4 @@
-# v3 architecture — learned, OpenCV-free fingerprint pipeline
+# v3 architecture — learned fingerprint pipeline
 
 **Status:** design contract for the v3 rewrite (2026-10-22). v2 (classical
 HSV + RootSIFT + RANSAC) remains available as the `classic` baseline and on the
@@ -12,7 +12,7 @@ benchmarks.
 | HSV skin thresholding | skin tone, white balance, background clutter; no fingertip localisation; unstable `finger_N` labels | learned hand-landmark detector → distal-phalanx crops with anatomical labels (`right_index`, …) |
 | Adaptive thresholding | destroys ridge detail on phone photos | learned-invariance embedding on normalised grayscale (no binarisation) |
 | RootSIFT + RANSAC (1600 × 128 floats per template, O(N) pairwise geometry per comparison) | weak on repetitive ridges, partial prints, cross-sensor; slow identification | fixed-length L2-normalised **deep embedding** (D ≤ 512); identification = one matrix product |
-| OpenCV runtime dependency | heavy, platform quirks | `numpy` + `Pillow` + `onnxruntime` only; models portable to ONNX / TFLite |
+| Heavy classical-CV runtime | large dependency, CPU-only feature matching | lean `numpy` + `Pillow` + `onnxruntime` runtime; models optimized for ONNX Runtime and LiteRT |
 
 ## Pipeline
 
@@ -79,7 +79,7 @@ def identification_metrics(scores: np.ndarray, labels_q, labels_g) -> Identifica
   cross-sensor robustness.
 - **Primary metric:** cross-dataset EER / TAR@FMR=1e-3 on held-out FVC2004
   DB1–4 B (never used for training or threshold selection).
-- Exports: ONNX FP32, ONNX INT8 (static or dynamic quantisation), TFLite
+- Exports: ONNX FP32, ONNX INT8 (static or dynamic quantisation), LiteRT (TFLite)
   FP16/INT8; parity tests compare each export with the PyTorch reference
   (cosine ≥ 0.99 on held-out images).
 - Model cards record data, licences (SOCOFing is CC BY-NC-SA 4.0 → weights are
