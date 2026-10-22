@@ -158,3 +158,12 @@ get the full per-file list, which is large and therefore not committed.
 * Full matcher configuration, per-set ROC points (subsampled), CMC curves and raw
   scores (`null` = FTE / failed comparison, ordered as
   `fvc_pairs(10, 8, impostor="all")`) are in each per-set JSON.
+
+## Note on the classic matcher's EER (vision-QA finding, 2026-10-22)
+
+The classic RootSIFT matcher is hard-gated: 97.7–100 % of impostor pairs and a share
+*p* of genuine pairs score exactly 0. Its interpolated EER therefore reduces to
+p / (1 + p) (e.g. FVC2000 DB1: p = 0.225 → 18.37 %), and it fails completely on
+FVC2002 DB4 (100 % of genuine scores are 0) and FVC2000 DB4 (99.6 %). Read its EER as
+an interval [0, p] and prefer FMR1000 / ZeroFMR when comparing against it. All 48
+reported EERs (24 runs × 2 impostor protocols) were independently recomputed and match.

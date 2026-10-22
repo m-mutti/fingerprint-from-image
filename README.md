@@ -296,7 +296,9 @@ flowchart LR
 <sub>Measured with <code>fingerprint-bench</code> and <code>benchmarks/comparators/sourceafis.py</code>; per-set results for
 all 12 FVC2000/2002/2004 DB_B sets, latency and failure-to-enrol rates are in
 <a href="benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>. Each DB_B set has only 10 fingers, so
-per-set confidence intervals are wide; compare averages. ⏳ = training in progress.</sub>
+per-set confidence intervals are wide; compare averages. The classic matcher scores most pairs exactly 0,
+so its EER is a tie artefact; FMR1000 is the fairer number for it (details in RESULTS.md). All reported EERs were
+independently recomputed. ⏳ = training in progress.</sub>
 
 **Published state of the art** ([benchmarks/SOTA.md](benchmarks/SOTA.md), every number checked against its primary source):
 the best FVC2004 open-category EERs are 1.97 / 1.58 / 1.18 / 0.61 % (DB1–4). Deep
