@@ -24,11 +24,23 @@ pinned to a revision and verified by SHA-256, only when ``--socofing`` and
 folders are **not** subject-disjoint; build a subject-disjoint split with
 ``fingerprint_from_image.evaluation.socofing_subject_split``.
 
+Additional sets from :mod:`fingerprint_from_image.data.registry` (``--extra``):
+``fvc_full`` (FVC2000/02/04 DB1-4 A+B, Handbook ESM), ``unsw_2d3d`` (contact +
+contactless, ~16.5 GB), ``impose_syn`` (Apache-2.0 synthetic contactless),
+``l3sf`` (CC-BY-4.0 synthetic), ``tdfd``, ``neurotech``, ``mendeley_family``.
+Archives go to ``data/raw/<slug>/`` (resumable, SHA-256/MD5 verified) and are
+extracted into ``data/<slug>/`` with path-traversal / zip-bomb / extension
+checks; executables inside archives are never extracted.  Sets without an
+open licence need ``--accept-research-terms``.  FVC2004 (A and B) is the
+held-out test set: the manifest builder always tags it ``heldout``.
+
 Usage::
 
     python scripts/download_datasets.py                       # all 12 FVC DB_B sets
     python scripts/download_datasets.py --sets FVC2004_DB1_B
     python scripts/download_datasets.py --socofing --accept-socofing-license
+    python scripts/download_datasets.py --no-fvc --extra impose_syn,l3sf,mendeley_family
+    python scripts/download_datasets.py --no-fvc --extra all --accept-research-terms
 """
 
 from __future__ import annotations
@@ -176,6 +188,44 @@ def install_socofing(data_root: Path, *, extract: bool = True) -> None:
     logger.info("extract %s (%d files)", data_root / "socofing", count)
 
 
+def install_extra(data_root: Path, slugs: list[str], *, accept_research: bool,
+                  extract: bool = True) -> None:
+    """Fetch, verify and safely extract registry datasets (see module docstring)."""
+
+    from fingerprint_from_image.data.archives import (
+        fetch_resumable,
+        file_digest,
+        safe_extract_7z,
+        safe_extract_zip,
+    )
+    from fingerprint_from_image.data.registry import DATASETS
+
+    for slug in slugs:
+        spec = DATASETS[slug]
+        if not spec.open_license and not accept_research:
+            raise RuntimeError(f"{slug} is '{spec.license}' ({spec.terms_url}); "
+                               "pass --accept-research-terms to download it")
+        for remote in spec.files:
+            target = data_root / "raw" / slug / remote.filename
+            if spec.downloader == "gdrive" and not target.is_file():
+                import gdown  # optional: pip install gdown
+
+                gdown.download(remote.url, str(target), quiet=False, resume=True)
+            fetch_resumable(remote.url, target, sha256=remote.sha256, md5=remote.md5,
+                            size=remote.size)
+            logger.info("sha256  %s %s", file_digest(target), target.name)
+            if not extract or not remote.extract:
+                continue
+            marker = data_root / slug / f".extracted-{remote.filename}"
+            if marker.is_file():
+                logger.info("ok      %s (already extracted)", remote.filename)
+                continue
+            extractor = safe_extract_7z if target.suffix == ".7z" else safe_extract_zip
+            count = extractor(target, data_root / slug)
+            marker.write_text(str(count), encoding="utf-8")
+            logger.info("extract %s -> %s (%d files)", remote.filename, data_root / slug, count)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fetch FVC DB_B and (optionally) SOCOFing.")
     parser.add_argument("--data-root", type=Path, default=Path("data"))
@@ -188,6 +238,9 @@ def main(argv: list[str] | None = None) -> int:
         help="confirm SOCOFing is used under CC BY-NC-SA 4.0 (non-commercial)",
     )
     parser.add_argument("--no-extract", action="store_true", help="download and verify only")
+    parser.add_argument("--extra", default="", help="comma-separated registry slugs, or 'all'")
+    parser.add_argument("--accept-research-terms", action="store_true",
+                        help="confirm research-only / non-commercial terms of --extra sets")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -202,6 +255,15 @@ def main(argv: list[str] | None = None) -> int:
             install_fvc(args.data_root, names, extract=not args.no_extract)
         if args.socofing:
             install_socofing(args.data_root, extract=not args.no_extract)
+        if args.extra:
+            from fingerprint_from_image.data.registry import DATASETS
+
+            slugs = list(DATASETS) if args.extra == "all" else args.extra.split(",")
+            unknown_extra = sorted(set(slugs) - set(DATASETS))
+            if unknown_extra:
+                parser.error(f"unknown dataset(s): {unknown_extra}; known: {sorted(DATASETS)}")
+            install_extra(args.data_root, slugs, accept_research=args.accept_research_terms,
+                          extract=not args.no_extract)
     except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
         logger.error("error: %s", exc)
         return 1
