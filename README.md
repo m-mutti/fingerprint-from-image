@@ -21,7 +21,7 @@
   <br>
   <img alt="Triton" src="https://img.shields.io/badge/kernels-Triton%20%7C%20CUDA-76B900?style=flat-square&logo=nvidia&logoColor=white">
   <img alt="Optimized" src="https://img.shields.io/badge/optimized-INT8%20%7C%20FP16%20%7C%20distilled-8B5CF6?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-99%20passing-14B8A6?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-156%20passing-14B8A6?style=flat-square">
   <img alt="Ruff" src="https://img.shields.io/badge/lint-ruff-D7FF64?style=flat-square&logo=ruff&logoColor=black">
   <a href="docs/ROADMAP.md"><img alt="Roadmap" src="https://img.shields.io/badge/roadmap-v3-6366F1?style=flat-square"></a>
 </p>
@@ -306,6 +306,24 @@ fixed-length methods such as DeepPrint and AFR-Net report 97.5–100 % TAR at FA
 Those numbers are on the larger **DB_A** sets with the official protocol, so they are
 targets, not like-for-like comparisons with the DB_B table above.
 
+### Training and evaluation data
+
+All data is indexed into one manifest format by `fingerprint_from_image.data`.
+Every image is decode-checked, exact and near duplicates are resolved across
+datasets, and splits are **subject-disjoint**. FVC2004 is always held out. See
+[docs/DATASETS.md](docs/DATASETS.md) for sources, checksums and the datasets that
+need a signed licence.
+
+| Dataset | Identities | Images | Modality | Licence | Role |
+|---|---:|---:|---|---|---|
+| FVC2000 / FVC2002, DB1–4 full (A + B) | 880 | 7,036 | optical, capacitive, synthetic | research (© BioLab) | train / val |
+| SOCOFing (duplicates merged) | 5,976 | 55,057 | optical, incl. altered | CC BY-NC-SA 4.0 | train / val / test |
+| L3SF | 740 | 7,400 | synthetic | CC BY 4.0 | train / val / test |
+| Mendeley family set | 1,363 | 1,363 | contact | CC BY 4.0 | train / val / test |
+| TDFD | 320 | 640 | optical | non-commercial research | train |
+| Neurotechnology samples | 77 | 928 | optical | vendor sample | val |
+| **FVC2004 DB1–4 full** | 440 | 3,520 | optical, thermal, synthetic | research (© BioLab) | **held-out test only** |
+
 ## ⚡ Edge deployment & optimization
 
 ```mermaid
@@ -359,6 +377,7 @@ Details and principles: [docs/ROADMAP.md](docs/ROADMAP.md).
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | v3 design contract, module interfaces, training and release rules |
 | [ROADMAP.md](docs/ROADMAP.md) | phases, status, datasets and licences |
+| [DATASETS.md](docs/DATASETS.md) | every dataset searched: acquired, licence, needs-the-user, unavailable |
 | [CLASSIC.md](docs/CLASSIC.md) | full manual for the classical CLI, JSON output and Python API |
 | [brand.md](docs/brand.md) | palette, typography, motion rules, asset usage |
 | [hand/README.md](src/fingerprint_from_image/hand/README.md) | fingertip detector: algorithm, capture requirements, limitations |
@@ -372,6 +391,7 @@ src/fingerprint_from_image/
 ├── embedding/                       ONNX fingerprint embedder           (in progress)
 ├── hand/                            hand-landmark fingertip detector (ONNX)
 ├── evaluation/                      biometric protocols, metrics, fingerprint-bench
+├── data/                            dataset manifests, indexers, dedup, safe extraction
 ├── extraction.py · features.py · pairwise.py · matcher.py · store.py   classical v2
 └── cli/                             fingerprint-extract · fingerprint-match
 training/        PyTorch training, Triton/CUDA optimization, ONNX/LiteRT export
@@ -384,7 +404,7 @@ tests/           fast unit tests (synthetic data and stand-in models)
 ## 🧪 Development
 
 ```bash
-python -m pytest                      # 99 tests; synthetic data, stand-in models, runs in seconds
+python -m pytest                      # 156 tests; synthetic data, stand-in models, runs in seconds
 ruff check .                          # lint
 python scripts/make_brand_assets.py   # regenerate every logo and animation deterministically
 ```
