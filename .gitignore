@@ -13,6 +13,7 @@ extracted/
 
 # Local datasets, model artifacts, and benchmark outputs
 data/
+!tests/data/
 runs/
 *.onnx.data
 .ruff_cache/

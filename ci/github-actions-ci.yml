@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uvx ruff@0.12.0 check .
+      - run: uvx ruff@0.17.1 check .
 
   test:
     needs: lint

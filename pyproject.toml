@@ -26,9 +26,12 @@ dependencies = [
 
 [project.optional-dependencies]
 plot = ["matplotlib>=3.8"]
+# Learned hand / fingertip detector (MediaPipe hand models converted to ONNX).
+hand = ["onnxruntime>=1.17"]
 dev = [
     "matplotlib>=3.8",
     "pytest>=8.0",
+    "onnxruntime>=1.17",
     "pytest-cov>=5.0",
     "ruff>=0.12",
 ]
