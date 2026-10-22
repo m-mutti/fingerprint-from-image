@@ -293,6 +293,13 @@ flowchart LR
 | SourceAFIS 3.14 (open-source minutiae matcher) | 9.29 % | 12.50 % | 5.36 % | 4.64 % | **7.95 %** | 15.18 % | 92.5 % |
 | **Learned v3 (this repo)** | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 
+**Primary protocol v1 (frozen): FVC2004 full** (110 fingers × 8 impressions per DB) with finger-level
+bootstrap 95 % CIs, the DB_B table above kept for continuity. SourceAFIS scores **10.29 %**
+[9.17, 11.44] mean EER on FVC2004 full (DB_A-only 10.41 %). DB_B alone cannot resolve differences
+below ~4 EER points; the full sets resolve ~1.6. A leakage audit found 0 exact and 0 near-duplicate
+FVC2004 images among 111,592 training-side images. Details: [RESULTS.md](benchmarks/RESULTS.md),
+[audit](docs/reviews/2026-10-22-protocol-leakage-audit.md).
+
 <sub>Measured with <code>fingerprint-bench</code> and <code>benchmarks/comparators/sourceafis.py</code>; per-set results for
 all 12 FVC2000/2002/2004 DB_B sets, latency and failure-to-enrol rates are in
 <a href="benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>. Each DB_B set has only 10 fingers, so
