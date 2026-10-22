@@ -2,3 +2,4 @@ numpy>=1.26
 opencv-python>=4.8
 matplotlib>=3.8
 
+pillow>=10.0
