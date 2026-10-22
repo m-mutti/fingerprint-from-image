@@ -1,180 +1,121 @@
-"""Generate the project logo, wordmark, and animated banner as SVG files.
+"""Regenerate every brand asset in ``assets/`` deterministically.
 
-The fingerprint mark is built from deterministic elliptical ridge arcs so the
-artwork can be regenerated and tweaked without a vector editor::
+SVGs are pure standard-library output. Raster outputs use optional tools and
+are skipped with a notice when those are missing:
 
-    python scripts/make_brand_assets.py --output-dir assets
+* ``social-preview.png`` needs ``resvg-py``;
+* ``pipeline-preview.gif`` needs ``playwright`` and a Chromium-family browser.
+
+::
+
+    python scripts/make_brand_assets.py                 # everything available
+    python scripts/make_brand_assets.py --svg-only      # SVGs only (no extra deps)
+    python scripts/make_brand_assets.py --output-dir /tmp/brand
 """
 
 from __future__ import annotations
 
 import argparse
-import math
+import sys
 from pathlib import Path
 
-TEAL = "#14B8A6"
-INDIGO = "#6366F1"
-INK = "#0F172A"
-PAPER = "#F8FAFC"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# (radius, [(start_deg, end_deg), ...]) — angles measured clockwise from +x in
-# SVG coordinates. Gaps between segments mimic ridge endings and bifurcations.
-RIDGES: tuple[tuple[float, tuple[tuple[float, float], ...]], ...] = (
-    (6.0, ((200, 520),)),
-    (11.0, ((185, 300), (312, 470))),
-    (16.0, ((170, 255), (268, 395), (405, 465))),
-    (21.0, ((160, 330), (342, 452))),
-    (26.0, ((152, 228), (240, 372), (384, 440))),
-    (31.0, ((148, 300), (314, 432))),
-    (36.0, ((150, 212), (224, 350), (362, 424))),
-    (41.0, ((160, 282), (296, 412))),
+from make_logo_assets import (  # noqa: E402
+    animated_logo_svg,
+    logo_small_svg,
+    logo_svg,
+    wordmark_svg,
 )
-CENTER = (64.0, 64.0)
-ROTATION = -25.0  # turns the ridge-ending gap toward the bottom, like a fingertip
-ASPECT = 1.18  # fingertips are taller than they are wide
+from make_pipeline_animation import LOOP, pipeline_svg  # noqa: E402
+from make_social_preview import render_png, social_svg  # noqa: E402
+
+# Byte budgets enforced by tests/test_brand_assets.py.
+SIZE_LIMITS = {
+    "pipeline-animated.svg": 150_000,
+    "pipeline-animated-light.svg": 150_000,
+    "logo-animated.svg": 60_000,
+    "social-preview.svg": 150_000,
+    "logo.svg": 20_000,
+    "logo-small.svg": 10_000,
+    "wordmark-light.svg": 20_000,
+    "wordmark-dark.svg": 20_000,
+}
+GIF_LIMIT = 3_000_000
+ANIMATED = ("pipeline-animated.svg", "pipeline-animated-light.svg", "logo-animated.svg")
+
+# Backwards-compatible alias for the previous generator API.
+animated_svg = animated_logo_svg
 
 
-def _arc_path(radius: float, start: float, end: float) -> str:
-    """Polyline approximation of an elliptical arc, rounded for compact output."""
+def build_svgs() -> dict[str, str]:
+    """Return ``{file name: SVG text}`` for every vector asset."""
 
-    cx, cy = CENTER
-    steps = max(6, int(abs(end - start) / 6))
-    points = []
-    for index in range(steps + 1):
-        angle = math.radians(ROTATION + start + (end - start) * index / steps)
-        points.append(
-            (cx + radius * math.cos(angle), cy + ASPECT * radius * math.sin(angle))
-        )
-    head = f"M{points[0][0]:.1f} {points[0][1]:.1f}"
-    return head + "".join(f"L{x:.1f} {y:.1f}" for x, y in points[1:])
+    return {
+        "logo.svg": logo_svg(),
+        "logo-small.svg": logo_small_svg(),
+        "wordmark-light.svg": wordmark_svg(dark=False),
+        "wordmark-dark.svg": wordmark_svg(dark=True),
+        "logo-animated.svg": animated_logo_svg(),
+        "pipeline-animated.svg": pipeline_svg("dark"),
+        "pipeline-animated-light.svg": pipeline_svg("light"),
+        "social-preview.svg": social_svg(),
+    }
 
 
-def _ridge_paths() -> list[tuple[str, float]]:
-    """Return ``(path_data, approximate_length)`` for every ridge segment."""
+def write_svgs(output_dir: Path) -> list[Path]:
+    """Write all SVGs (LF line endings) and return their paths."""
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     paths = []
-    for radius, segments in RIDGES:
-        for start, end in segments:
-            length = math.radians(end - start) * radius * (1 + ASPECT) / 2
-            paths.append((_arc_path(radius, start, end), length))
+    for name, content in build_svgs().items():
+        path = output_dir / name
+        path.write_text(content, encoding="utf-8", newline="\n")
+        paths.append(path)
     return paths
 
 
-def _viewfinder(stroke: str, width: float = 5.0) -> str:
-    """Camera viewfinder corners: the "from image" half of the mark."""
+def write_rasters(output_dir: Path, *, gif: bool = True, channel: str | None = "chrome") -> None:
+    """Render the social PNG and the pipeline GIF when their tools exist."""
 
-    corner = 22
-    lo, hi = 8, 120
-    return (
-        f'<g fill="none" stroke="{stroke}" stroke-width="{width}" '
-        f'stroke-linecap="round" stroke-linejoin="round">'
-        f'<path d="M{lo} {lo + corner}V{lo + 6}Q{lo} {lo} {lo + 6} {lo}H{lo + corner}"/>'
-        f'<path d="M{hi - corner} {lo}H{hi - 6}Q{hi} {lo} {hi} {lo + 6}V{lo + corner}"/>'
-        f'<path d="M{hi} {hi - corner}V{hi - 6}Q{hi} {hi} {hi - 6} {hi}H{hi - corner}"/>'
-        f'<path d="M{lo + corner} {hi}H{lo + 6}Q{lo} {hi} {lo} {hi - 6}V{hi - corner}"/>'
-        "</g>"
-    )
+    social = output_dir / "social-preview.png"
+    if render_png((output_dir / "social-preview.svg").read_text(encoding="utf-8"), social):
+        print(f"wrote {social}")
+    else:
+        print("skip social-preview.png (pip install resvg-py)")
+    if not gif:
+        return
+    try:
+        from make_preview_frames import make_gif
 
-
-def _gradient(identifier: str) -> str:
-    return (
-        f'<linearGradient id="{identifier}" x1="0" y1="0" x2="1" y2="1">'
-        f'<stop offset="0" stop-color="{TEAL}"/><stop offset="1" stop-color="{INDIGO}"/>'
-        "</linearGradient>"
-    )
-
-
-def logo_svg() -> str:
-    ridges = "".join(f'<path d="{d}"/>' for d, _ in _ridge_paths())
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" '
-        'width="128" height="128" role="img" aria-labelledby="t">'
-        "<title id=\"t\">fingerprint-from-image logo</title>"
-        f"<defs>{_gradient('g')}</defs>"
-        f'<g fill="none" stroke="url(#g)" stroke-width="3.6" stroke-linecap="round">'
-        f"{ridges}</g>"
-        f"{_viewfinder('url(#g)')}"
-        "</svg>\n"
-    )
-
-
-def wordmark_svg(*, dark: bool) -> str:
-    text = PAPER if dark else INK
-    muted = "#94A3B8" if dark else "#475569"
-    ridges = "".join(f'<path d="{d}"/>' for d, _ in _ridge_paths())
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 128" '
-        'width="560" height="128" role="img" aria-labelledby="t">'
-        "<title id=\"t\">fingerprint-from-image</title>"
-        f"<defs>{_gradient('g')}</defs>"
-        f'<g fill="none" stroke="url(#g)" stroke-width="3.6" stroke-linecap="round">'
-        f"{ridges}</g>{_viewfinder('url(#g)')}"
-        '<g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">'
-        f'<text x="146" y="66" font-size="40" font-weight="700" fill="{text}" '
-        'letter-spacing="-0.5">fingerprint</text>'
-        f'<text x="148" y="100" font-size="22" font-weight="500" fill="{muted}" '
-        'letter-spacing="3">FROM · IMAGE</text>'
-        "</g></svg>\n"
-    )
-
-
-def animated_svg() -> str:
-    """Ridges draw in, a scan line sweeps, then the mark "locks" with a pulse.
-
-    Uses CSS keyframes only, so it animates inside GitHub's ``<img>`` sandbox.
-    """
-
-    paths = []
-    for index, (d, length) in enumerate(_ridge_paths()):
-        dash = math.ceil(length) + 2
-        delay = 0.08 * index
-        paths.append(
-            f'<path class="r" d="{d}" style="stroke-dasharray:{dash};'
-            f'stroke-dashoffset:{dash};animation-delay:{delay:.2f}s"/>'
+        out = make_gif(
+            output_dir / "pipeline-animated.svg",
+            output_dir / "pipeline-preview.gif",
+            duration=LOOP,
+            fps=12.5,
+            width=800,
+            channel=channel,
         )
-    css = (
-        "@keyframes draw{to{stroke-dashoffset:0}}"
-        "@keyframes scan{0%{transform:translateY(0);opacity:0}"
-        "10%{opacity:1}90%{opacity:1}100%{transform:translateY(104px);opacity:0}}"
-        "@keyframes lock{0%,100%{opacity:.35}50%{opacity:1}}"
-        ".r{animation:draw 1.1s cubic-bezier(.4,0,.2,1) forwards}"
-        ".s{animation:scan 2.4s ease-in-out 1.6s infinite}"
-        ".v{animation:lock 2.4s ease-in-out 1.6s infinite}"
-        "@media (prefers-reduced-motion:reduce){.r{animation:none;stroke-dashoffset:0}"
-        ".s{display:none}.v{animation:none;opacity:1}}"
-    )
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" '
-        'width="256" height="256" role="img" aria-labelledby="t">'
-        "<title id=\"t\">Animated fingerprint scan</title>"
-        f"<defs>{_gradient('g')}"
-        '<linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">'
-        f'<stop offset="0" stop-color="{TEAL}" stop-opacity="0"/>'
-        f'<stop offset="1" stop-color="{TEAL}" stop-opacity=".55"/></linearGradient>'
-        f"</defs><style>{css}</style>"
-        f'<g fill="none" stroke="url(#g)" stroke-width="3.6" stroke-linecap="round">'
-        f"{''.join(paths)}</g>"
-        f'<g class="v">{_viewfinder("url(#g)")}</g>'
-        '<g class="s"><rect x="12" y="2" width="104" height="12" fill="url(#sg)"/>'
-        f'<rect x="12" y="13" width="104" height="1.6" rx=".8" fill="{TEAL}"/></g>'
-        "</svg>\n"
-    )
+    except ImportError:
+        print("skip pipeline-preview.gif (pip install playwright)")
+        return
+    size = out.stat().st_size
+    print(f"wrote {out} ({size / 1e6:.2f} MB)")
+    if size > GIF_LIMIT:
+        raise SystemExit(f"{out} exceeds {GIF_LIMIT} bytes")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--output-dir", default="assets", type=Path)
+    parser.add_argument("--output-dir", default=Path("assets"), type=Path)
+    parser.add_argument("--svg-only", action="store_true", help="skip PNG/GIF rendering")
+    parser.add_argument("--no-gif", action="store_true", help="skip the headless-browser GIF")
+    parser.add_argument("--channel", default="chrome", help="browser channel; '' = bundled")
     args = parser.parse_args()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    outputs = {
-        "logo.svg": logo_svg(),
-        "wordmark-light.svg": wordmark_svg(dark=False),
-        "wordmark-dark.svg": wordmark_svg(dark=True),
-        "logo-animated.svg": animated_svg(),
-    }
-    for name, content in outputs.items():
-        (args.output_dir / name).write_text(content, encoding="utf-8", newline="\n")
-        print(f"wrote {args.output_dir / name}")
+    for path in write_svgs(args.output_dir):
+        print(f"wrote {path} ({path.stat().st_size / 1000:.1f} kB)")
+    if not args.svg_only:
+        write_rasters(args.output_dir, gif=not args.no_gif, channel=args.channel or None)
     return 0
 
 
