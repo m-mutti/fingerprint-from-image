@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from ..models import ModelSpec, model_path, register
+from ..models import ModelSpec, ModelUnavailableError, model_path, register
 
 __all__ = [
     "LANDMARK_MODEL",
@@ -62,6 +62,8 @@ def load_session(spec: ModelSpec, model_dir: Path | None,
             "The hand detector needs onnxruntime: pip install onnxruntime"
         ) from exc
     explicit = None if model_dir is None else Path(model_dir) / spec.name
+    if explicit is not None and not explicit.is_file():
+        raise ModelUnavailableError(f"Model file not found: {explicit}")
     path = model_path(spec.name, explicit=explicit, download=False)
     options = ort.SessionOptions()
     options.log_severity_level = 3

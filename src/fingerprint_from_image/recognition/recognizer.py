@@ -198,7 +198,11 @@ class FingerprintRecognizer:
         if self.detector is None:
             raise FingerprintMatchingError("Hand images require a finger detector")
         rgb = load_image(image, mode="RGB") if isinstance(image, (str, Path)) else image
-        found = [c for c in self.detector(rgb) if c.quality >= self.config.min_crop_quality]
+        try:
+            detected = self.detector(rgb)
+        except ValueError as exc:  # e.g. HandNotFoundError, grayscale input
+            raise FingerprintMatchingError(str(exc)) from exc
+        found = [c for c in detected if c.quality >= self.config.min_crop_quality]
         if not found:
             raise FingerprintMatchingError("No usable fingertips were detected")
         return found

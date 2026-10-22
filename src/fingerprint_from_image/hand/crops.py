@@ -115,6 +115,7 @@ def finger_boxes(landmarks: np.ndarray, config: CropConfig | None = None) -> lis
         if length > 0:
             width = float(np.clip(width, config.min_width_per_length * length,
                                   config.max_width_per_length * length))
+        width = max(width, 1.0)  # degenerate landmarks must not yield a zero-width box
         length = max(length, config.min_length_per_width * width)
         top = tip + direction * config.tip_margin * length
         bottom = dip - direction * config.base_margin * length

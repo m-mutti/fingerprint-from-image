@@ -29,6 +29,8 @@ def load_image(path: str | Path, *, mode: Literal["L", "RGB"] = "L") -> np.ndarr
                 gray = _normalize_to_uint8(np.asarray(image, dtype=np.float32))
                 return gray if mode == "L" else to_rgb(gray)
             return np.asarray(image.convert(mode), dtype=np.uint8).copy()
+    except Image.DecompressionBombError as exc:
+        raise ImageLoadError(f"Image is too large to decode safely: {source}") from exc
     except (OSError, ValueError) as exc:
         raise ImageLoadError(f"Could not read image: {source}") from exc
 

@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     report = {}
     for path in args.images:
         rgb = load_image(path, mode="RGB")
-        detector(rgb)  # warm-up
+        detector.detect_hands(rgb)  # warm-up; tolerates images without hands
         timings: dict[str, list[float]] = {"hands_ms": [], "crops_ms": []}
         for _ in range(args.repeats):
             start = time.perf_counter()

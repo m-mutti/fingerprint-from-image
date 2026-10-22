@@ -29,6 +29,16 @@ from .topology import Side, finger_label, palm_facing, side_from_score
 __all__ = ["DetectorConfig", "HandFingerDetector", "HandNotFoundError", "HandResult"]
 
 
+def _color_image(rgb: np.ndarray) -> Image.Image:
+    """Validate colour input; the palm model cannot find hands in grayscale."""
+
+    if np.asarray(rgb).ndim == 2:
+        raise ValueError(
+            "HandFingerDetector needs a colour image; use load_image(path, mode='RGB')"
+        )
+    return Image.fromarray(to_rgb(rgb))
+
+
 class HandNotFoundError(ValueError):
     """Raised when no hand passes the palm-detection and presence thresholds."""
 
@@ -72,6 +82,10 @@ class DetectorConfig:
             raise ValueError("max_hands must be at least 1")
         if self.refine_iterations < 0:
             raise ValueError("refine_iterations must be non-negative")
+        for name in ("palm_score_threshold", "nms_iou_threshold", "presence_threshold",
+                     "duplicate_iou"):
+            if not 0.0 <= float(getattr(self, name)) <= 1.0:
+                raise ValueError(f"{name} must be in [0, 1]")
 
 
 @dataclass(frozen=True)
@@ -149,7 +163,7 @@ class HandFingerDetector:
     def detect_hands(self, rgb: np.ndarray) -> list[HandResult]:
         """Run palm detection and landmark regression; returns up to ``max_hands``."""
 
-        return self._detect(Image.fromarray(to_rgb(rgb)))
+        return self._detect(_color_image(rgb))
 
     def _detect(self, image: Image.Image) -> list[HandResult]:
         cfg = self.config
@@ -184,7 +198,7 @@ class HandFingerDetector:
                      ) -> list[FingerCrop]:
         """Five upright fingertip crops (thumb..little) for one detected hand."""
 
-        return self._crops(Image.fromarray(to_rgb(rgb)), hand, source)
+        return self._crops(_color_image(rgb), hand, source)
 
     def _crops(self, image: Image.Image, hand: HandResult, source: str | None
                ) -> list[FingerCrop]:
@@ -207,9 +221,10 @@ class HandFingerDetector:
 
         Raises:
             HandNotFoundError: if no hand is detected.
+            ValueError: if ``rgb`` is a grayscale image.
         """
 
-        image = Image.fromarray(to_rgb(rgb))
+        image = _color_image(rgb)
         hands = self._detect(image)
         if not hands:
             raise HandNotFoundError("No hand detected in the image")

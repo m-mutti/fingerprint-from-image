@@ -163,7 +163,8 @@ def rect_from_landmarks(
     """Hand ROI recomputed from 21 landmarks (``HandLandmarksToRectCalculator``)."""
 
     pts = np.asarray(landmarks, dtype=np.float64)[:, :2]
-    middle = 0.25 * (pts[5] + pts[13]) / 2 + 0.75 * pts[9]
+    # MediaPipe HandLandmarksToRectCalculator: ((L5 + L13) / 2 + L9) / 2.
+    middle = 0.25 * pts[5] + 0.5 * pts[9] + 0.25 * pts[13]
     rotation = _rotation(pts[0], middle)
     subset = pts[list(_ROI_LANDMARKS)]
     c, s = math.cos(rotation), math.sin(rotation)
