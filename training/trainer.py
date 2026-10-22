@@ -85,7 +85,7 @@ class Trainer:
                  device: str | None = None) -> None:
         self.cfg, self.run_dir, self.data = cfg, run_dir, data
         self.batch, self.accum = batch, accum
-        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.device = torch.device(device or ("cuda" if torch.cuda.device_count() > 0 else "cpu"))
         self.cuda = self.device.type == "cuda"
         if self.cuda:
             torch.cuda.set_per_process_memory_fraction(0.9)  # never spill into WDDM shared memory

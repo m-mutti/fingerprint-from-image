@@ -79,7 +79,7 @@ def environment() -> dict[str, Any]:
         "cuda": torch.version.cuda,
         "timm": timm.__version__,
         "numpy": np.__version__,
-        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
+        "gpu": torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "cpu",
         "git_commit": commit,
     }
 

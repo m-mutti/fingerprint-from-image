@@ -172,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true",
                         help="gather data + guards + lineage only (CPU, no cache/GPU)")
     args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     overrides = {}
     for item in args.set:
         key, value = item.split("=", 1)
