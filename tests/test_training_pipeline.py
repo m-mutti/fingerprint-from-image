@@ -160,3 +160,24 @@ def test_classify_failure() -> None:
     assert classify_failure("TrainingAborted: divergence: window loss", 1) == "divergence"
     assert classify_failure("ContaminationError: 3 training images", 1) == "contamination"
     assert classify_failure("ValueError: boom", 2) == "exit 2"
+
+
+def test_evaluation_refuses_unverified_checkpoints(tmp_path: Path,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    import training.evaluate as ev
+
+    (tmp_path / "FVC2004.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in _rows()), encoding="utf-8")
+    digest = heldout_from_rows(_rows()).digest
+    good = {"key": "k" * 64, "data": {"heldout_guard": {"heldout_overlap": 0,
+                                                        "heldout_digest": digest}}}
+    monkeypatch.setattr(ev, "_train_record", lambda _: good)
+    assert ev.check_checkpoint(tmp_path / "best.pt", tmp_path) == "k" * 64
+    for bad in ({"key": "x", "data": {}},
+                {"key": "x", "data": {"heldout_guard": {"heldout_overlap": 0,
+                                                        "heldout_digest": "other"}}}):
+        monkeypatch.setattr(ev, "_train_record", lambda _, bad=bad: bad)
+        with pytest.raises(ContaminationError):
+            ev.check_checkpoint(tmp_path / "best.pt", tmp_path)
