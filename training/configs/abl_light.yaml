@@ -1,0 +1,6 @@
+# Ablation: light augmentation (rotation 15, small scale/translation, little photometric).
+name: abl_light
+aug:
+  strength: light
+optim:
+  epochs: 10

@@ -1,0 +1,6 @@
+# Manifest ablation M2 (b): M1 + l3sf synthetic (590 train ids x 10).
+name: m2_l3sf
+data:
+  manifest_train: {SOCOFing: 0.4, FVC2000: 0.225, FVC2002: 0.225, l3sf: 0.15}
+optim:
+  epochs: 8

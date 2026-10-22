@@ -1,0 +1,11 @@
+# A1: multi-impression data mix - no SOCOFing CR, + l3sf / TDFD / synthetic_v2 (8 impr./id),
+# SOCOFing ~25 %, mendeley_family excluded. Hypothesis: the largest single gain.
+name: a1_datamix
+data:
+  manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
+  socofing_drop_variants: [CR]
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.15
+optim:
+  epochs: 8
+  k: 1

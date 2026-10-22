@@ -1,0 +1,4 @@
+# Ablation reference: main recipe on the short (10-epoch) ablation schedule.
+name: abl_heavy
+optim:
+  epochs: 10

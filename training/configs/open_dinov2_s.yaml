@@ -1,0 +1,24 @@
+# OPEN track: weights releasable under open terms. DINOv2 ViT-S/14 (Apache-2.0) trained only
+# on openly licensed data - L3-SF (CC-BY-4.0) and our generated synthetic_v2 prints. No
+# SOCOFing / FVC / TDFD in training; FVC is used for validation and testing only.
+# mendeley_family (CC-BY-4.0) is single-impression and excluded from identity training.
+name: open_dinov2_s
+input_size: 224
+model:
+  backbone: vit_small_patch14_reg4_dinov2.lvd142m
+data:
+  manifest_train: {l3sf: 0.4}
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.6
+loss:
+  aux: supcon
+  aux_weight: 0.5
+aug:
+  elastic: 0.06
+  translate: 0.15
+  partial: 0.4
+  polarity: 0.0
+optim:
+  epochs: 40
+  k: 4
+  lr: 0.0002

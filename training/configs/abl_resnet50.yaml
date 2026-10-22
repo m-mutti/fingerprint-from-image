@@ -1,0 +1,6 @@
+# Ablation: ResNet-50 backbone instead of ConvNeXt-V2-Tiny.
+name: abl_resnet50
+model:
+  backbone: resnet50.a1_in1k
+optim:
+  epochs: 10

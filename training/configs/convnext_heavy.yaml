@@ -1,0 +1,18 @@
+# Main recipe: ridge-period normalisation + heavy acquisition augmentation,
+# SOCOFing (subject-disjoint train) + FVC2000 DB_B, ConvNeXt-V2-Tiny, ArcFace.
+name: convnext_heavy
+model:
+  backbone: convnextv2_tiny.fcmae_ft_in22k_in1k
+  head: gem
+  dim: 256
+aug:
+  strength: heavy
+loss:
+  kind: arcface
+  scale: 32.0
+  margin: 0.4
+optim:
+  epochs: 30
+  samples_per_epoch: 40000
+  batch_size: 96
+  lr: 0.0004

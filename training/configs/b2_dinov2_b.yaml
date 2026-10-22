@@ -1,0 +1,15 @@
+# B2: DINOv2 ViT-B/14 with registers (Apache-2.0 weights) at 224 px. The VRAM probe will
+# lower the batch if 96 does not fit in 80 % of VRAM (accumulation keeps the effective batch).
+name: b2_dinov2_b
+input_size: 224
+model:
+  backbone: vit_base_patch14_reg4_dinov2.lvd142m
+data:
+  manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
+  socofing_drop_variants: [CR]
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.15
+optim:
+  epochs: 8
+  k: 1
+  lr: 0.0001

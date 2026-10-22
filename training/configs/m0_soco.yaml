@@ -1,0 +1,6 @@
+# Manifest ablation M0: SOCOFing (manifest train split) only.
+name: m0_soco
+data:
+  manifest_train: {SOCOFing: 1.0}
+optim:
+  epochs: 8
