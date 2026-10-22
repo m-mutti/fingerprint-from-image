@@ -1,22 +1,48 @@
 # Fingerprint embedder — experiment log
 
-Every number below comes from a command recorded next to it. Run artefacts
-(checkpoints, `metrics.jsonl`, `train.log`, `plots/`) live in
-`E:\Personal_tries\Mutti_Finger_Prints\runs\embedder\<run>`; `runs/embedder/LATEST`
-points at the active run.
+Every number below comes from a command recorded next to it.
 
-## Protocol
+## Status (2026-10-22, evening)
+
+* **All run artefacts were deleted** (the user removed `E:\Personal_tries\Mutti_Finger_Prints\runs\`
+  at ~18:45: checkpoints, canvas caches, eval outputs). The legacy-protocol numbers below
+  were measured before that and are kept from the command outputs; their checkpoints no
+  longer exist and they are **not comparable** with the manifest protocol.
+* Training restarts **from scratch** on the content-addressed pipeline (below), after the
+  fair SOTA baseline (another agent) releases the GPU and after the design reviews
+  (`docs/reviews/2026-10-22-*.md`) were folded in. No GPU job has run since.
+
+## Protocol (manifest era — applies to every run from now on)
 
 | item | choice |
 |---|---|
-| held-out test | FVC2004 DB1–4 B — never used for training, checkpoint selection, thresholds or preprocessing choices |
-| training data | SOCOFing train subjects (shared seed-0 split, `benchmarks/splits/socofing_subject_split_seed0.json`: 480 train / 60 val / 60 test subjects) Real + Altered, after duplicate merging (below); FVC2000 DB1–4 B (40 fingers × 8 impressions) |
-| model selection | FVC2002 DB1–4 B, mean EER over all impostor pairs (best epoch of the EMA weights). SOCOFing-val EER (Altered-Hard probes vs Real gallery of the 60 val subjects) is logged but not used for selection |
-| FVC metrics | per set: genuine = 280 same-finger pairs; impostor "fvc" = 45 first-impression pairs; impostor "all" = 2880 cross-finger pairs; EER on both, FMR100/FMR1000/ZeroFMR on "all". `training/eval_fvc.py` (self-contained) |
-| SOCOFing test split | never touched by this work |
+| data | shared manifests `data/manifests/*.jsonl` (rows with `exclude: true` dropped; 157 cross-dataset duplicate groups resolved by the data agent) |
+| held-out test | FVC2004 (`split == heldout`): DB1–4 B (10 fingers/DB, comparable with the classic/SourceAFIS table) **and** FVC2004 full (110 fingers/DB; DB_A = fingers 1–100). Never read by training, selection, thresholds or preprocessing choices; enforced in code (`training/guards.py`) |
+| training | manifest `train` split; per-source epoch shares (`data.manifest_train`) |
+| selection | manifest `val` identities only: contact FVC2000/2002 DB1–3 (fingers 101–110) + neurotech. **Primary** = pooled FNMR @ FMR 0.1 % with one global threshold; **secondary** = mean per-set EER; per-sensor EERs (also FVC DB4, l3sf, SOCOFing) logged every evaluation |
+| test metrics | genuine = all same-finger pairs; impostor "fvc" = first impressions across fingers, "all" = every cross-finger pair; EER on both, FMR100/FMR1000/ZeroFMR on "all" (`training/eval_fvc.py`, `training/eval_full.py`, keyed in `training/evaluate.py`) |
 
-Discard every metric from `runs/embedder/smoke_20261022_162949` (random 540/60 subject split
-that did not match the shared split, and no duplicate handling).
+## Legacy-protocol results (artefacts lost; for the record only)
+
+Data: SOCOFing seed-0 train subjects (incl. CR alterations) + FVC2000 DB_B; selection on
+FVC2002 DB_B (mean EER, all impostors). ConvNeXt-V2-T @256, ArcFace s32/m0.4, heavy aug,
+B=128, stopped at epoch 12 of 30 (plateau). Commands:
+`python -m training.summarize runs/embedder/convnext_heavy_20261022_175008` and
+`python -m training.eval_full --checkpoint .../best.pt` (best = epoch 8).
+
+| run | sel. epoch | FVC2002 EER all | FVC2004 DB_B EER fvc | FVC2004 DB_B EER all | DB_B FMR100 | DB_B FMR1000 | DB_B per-DB EER all | FVC2004 full EER all |
+|---|---|---|---|---|---|---|---|---|
+| `convnext_heavy_20261022_175008` | 8 | 15.59 | 21.36 | **20.24** | 63.0 | 83.3 | 17.2 / 26.6 / 21.4 / 15.7 | 19.05* |
+| SourceAFIS 3.14 (reference) | — | 5.72 | 8.75 | **7.95** | 12.0 | 15.2 | 9.3 / 12.5 / 5.4 / 4.6 | — |
+| classic v2 RootSIFT (reference) | — | 34.22 | 34.65 | **35.37** | 61.2 | 66.5 | 44.6 / 40.5 / 12.2 / 44.2 | — |
+
+\*evaluated after the ridge size-prior change (20 → 16 ridges) that the checkpoint was not
+trained with. Rotation TTA on FVC2002 (val): 15.59 → 15.51 % (3 angles) — not adopted.
+Failure analysis on FVC2002 genuine pairs (scratch script): miss rate @ FMR 1 % 0.55 for
+scale-matched impressions vs 0.73 when the estimated scales differ by > 10 % — the
+representation, not preprocessing, is the main limit. ML review diagnosis: 89 % of the
+SOCOFing training images are pixel-aligned alterations of one capture; the fix is
+multi-impression data (manifest era).
 
 ## Data fixes (before any real training)
 
@@ -141,6 +167,64 @@ unchanged. (Loss rises in epoch 2 because the ArcFace margin switches on.)
 \*The compiled leg overlapped with a CPU-heavy ONNX export test; uncontended throughput is
 the 411.7 img/s benchmark above. One-off compile cost ≈ 4 min (epoch 1: 304 s).
 
-## Ablations (FVC2002 = selection, FVC2004 = held-out test)
+## Pipeline (docs/TRAINING_PIPELINE.md, implemented in `training/`)
 
-_pending._
+| piece | module | behaviour |
+|---|---|---|
+| content keys + `done.json` | `keys.py` | step key = SHA-256 of canonical JSON inputs; outputs hashed; verified skip; `invalidate` |
+| canvas cache | `data.build_cache` | key = image SHA-256 list (manifest) / path+size+mtime (generated) + preprocessing version + **preprocessing source hash** + params |
+| train | `train.py`, `trainer.py` | key = resolved config + cache key + **content hash of tracked+untracked `training/` and `src/` .py files** + held-out digest + resolved batch; skip if done; resume from `state.pt` (model, EMA, classifier, optimizer, counters, guards, sampler + all RNGs) — exact on CPU (test) |
+| guards | `guards.py`, `sources.py`, `evaluate.py` | training refuses held-out identities/paths/hashes; val identities may not appear in training; selection reads `val` rows only; evaluation refuses checkpoints without a clean held-out record; metrics refuse NaN |
+| queue | `queue.py` | `submit` / `submit-module` (any GPU job, e.g. the baseline) / `worker` / `status` / `rerun`; priorities; crash recovery (running → pending → resume); heartbeat stall guard (20 min); reasons oom / divergence / nonfinite / stall / exit |
+| registry + leaderboard | `registry.py`, `report.py` | `runs/registry.sqlite`; `python -m training.report` → `benchmarks/LEADERBOARD.md` + plots, with licence lineage (`licences.py`: open vs research-only) |
+| sweeps | `sweep.py`, `sweeps/hp_v1.yaml` | successive halving over queue jobs, ranked on val only, idempotent |
+| export | `export.py`, `export_litert.py` | variants accepted on **val** (parity ≥ 0.99, pooled val metrics within 10 %); FVC2004 reported once per accepted file; `preprocess_version` in ONNX metadata, runtime refuses mismatches |
+
+### Batch-size policy (user requirement)
+
+* Requested B = 96 (ML review: B = 128 peaked at 16.0 / 16.3 GB in the legacy run, at the edge
+  of WDDM spill). `batch_probe.py` (subprocess, static compile as in training, process capped
+  with `set_per_process_memory_fraction`) measures peak reserved VRAM for ascending
+  multiples of K up to the request, extrapolates and never runs a candidate predicted above
+  **80 % of 16.3 GB**; the largest fitting B ≤ request is used and recorded in `done.json`.
+  If B < requested, gradient accumulation keeps the effective batch.
+* P×K sampler (`sampler.py`): P identities × K images, identities drawn per source share;
+  sources with < K images repeat images (fresh augmentation views).
+* LR = `optim.lr` (5e-4 at B = 128) × sqrt(B_eff / 128); warm-up ≥ 1 epoch; clip 5.0 over
+  backbone + head + classifier; EMA 0.9995 with warm-up.
+* Stability: per-step loss mean/std, grad-norm, img/s, GPU util and peak VRAM logged every
+  50 steps; non-finite loss is checked **before** backward (BN/AdaFace buffers restored,
+  step skipped, abort after 20); divergence guard (window loss > 2× best for 3 windows);
+  early stop after epoch 40 if the pooled val metric does not improve in 3 evaluations.
+* Chosen B, peak VRAM and img/s per run: _pending the first GPU run_.
+
+### Review responses
+
+| review item | status |
+|---|---|
+| code H1 stale heartbeat kills resumed jobs | fixed (heartbeat unlinked, `max(start, mtime)`), test |
+| code H2 code key | fixed (content hash of tracked + untracked `.py`), test |
+| code H3 NaN poisons BN/EMA/validation | fixed (finite check before backward, buffer restore, metrics/validator raise), tests |
+| code H4 probe spill / leaks | fixed (subprocess, static compile, memory cap, extrapolation, `empty_cache` after val) |
+| code M1–M5, L3, L4, L6, L7, L8 | fixed; L1 (uint8 cache rounding) and L2 left as documented |
+| ML #1 data construction | `socofing_drop_variants: [CR]`, review shares, mendeley excluded, synthetic_v2 (8 impr./id, 4000 ids, generating on CPU) |
+| ML #2 selection metric | pooled FNMR@FMR0.1 % + mean EER; `stats.paired_bootstrap`; A2 seed repeat |
+| ML #3 positives in batch | P×K (K=4) + SupCon/MS aux loss (A3); AdaFace switch (A5) |
+| ML #4 distortion aug | A4 retune (elastic 0.06, translate 0.15, partial 0.4, polarity 0); no sweep-sensor aug |
+| ML #7 schedule | B 96 via probe, EMA 0.9995, eval every 4, early stop |
+
+## Plan (queued when the GPU is released)
+
+1. Ablations A0–A5 (`training/configs/a*.yaml`, 8 epochs × 40k, one variable each; A2 = seed
+   noise floor) → adopt a change only if it beats A1 on both val metrics by more than A2's
+   seed difference (or its bootstrap CI excludes 0).
+2. Backbone: B0 ConvNeXt-V2-T @224, B1 DINOv2-S/14, B2 DINOv2-B/14 (Apache-2.0) on the A1 mix.
+3. `sweeps/hp_v1.yaml` (24 sampled points, rungs 4 → 8 → 12 epochs) on the winner.
+4. `v1_long` (≤ 80 epochs, early stop) → `python -m training.evaluate` (FVC2004 DB_B + full)
+   → export + parity → leaderboard.
+5. Open track: `open_dinov2_s.yaml` (DINOv2-S + L3-SF CC-BY + our synthetic prints only),
+   reported next to the research-licensed model.
+
+## Ablations (manifest protocol)
+
+_pending — the GPU is owned by the baseline run._
