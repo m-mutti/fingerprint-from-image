@@ -72,3 +72,57 @@ python -m fingerprint_from_image.data.synth.generate --out ../../data/synth_proc
 # manifests + SUMMARY.md + quality_report.json (probe cache makes reruns fast)
 python -m fingerprint_from_image.data.build --data-root ../../data --workers 8
 ```
+
+## 5. Search results (2026-10-22)
+
+The search covered NIST, FVC, CASIA, PolyU, IIITD, Tsinghua, LivDet, vendors, Hugging Face,
+Zenodo, Figshare, Mendeley, IEEE DataPort, GitHub and generators. Open licences are listed
+first. "Acquired" means downloaded without any login, form or click-through.
+
+| dataset | content | open licence? (exact) | access | status |
+|---|---|---|---|---|
+| IMPOSE-SYN | 1,712 synthetic ids, rolled + 15,136 contactless poses | yes, Apache-2.0 | public Google Drive | **acquired** |
+| L3-SF | 740 synthetic ids x 10, level-3 detail | yes, CC-BY-4.0 | Zenodo 11098776 | **acquired** |
+| NaijaFINGSET | 1,052 subject ids (description says 1,266) x 10 fingers x 1, SecuGen | yes, CC-BY-4.0 | Mendeley hzmn84khmh (public zip) | **acquired** |
+| FAMILY fingerprint | 300 people x 5 fingers x 1, scanned ink, low quality | yes, CC-BY-4.0 | Mendeley m4kz5ygxrn | **acquired** |
+| in-repo procedural | 5,000 synthetic ids x 8 | yes, no third-party inputs | `data.synth.generate` | **generated** |
+| UNSW/UWA 2D+3D | 150 subjects x 10 fingers, contact + contactless | no: Zenodo says CC0, bundled licence says research only | Zenodo 10432121 | **acquired** (16.5 GB) |
+| FVC2000/02/04 A+B | 12 DBs x 110 fingers x 8 | no, licence unstated | Springer Handbook ESM zip | **acquired** (FVC2004 = heldout) |
+| Tsinghua TDFD | 320 normal/distorted pairs | no, non-commercial | direct | **acquired** |
+| Neurotechnology samples | same people on CrossMatch V300 + U.are.U 4000 | no, terms unstated | direct | **acquired** |
+| SOCOFing | 600 x 10 + altered | no, CC-BY-NC-SA-4.0 | (already present) | present |
+| NIST SD302 (a-i) | N2N challenge: rolled/plain/contactless devices, **raw phone photos (302f)**, latents | no: "will not be further distributed"; delete on request | NIGOS request form | **needs the user** |
+| NIST SD300a / SD301 | inked rolled cards (888) / N2N dry run | no, same NIGOS terms | request form | needs the user |
+| NIST SD4, 9, 10, 14, 27, 29, 30 | - | - | withdrawn by NIST | unavailable |
+| HF mirrors of SD302 / SD4 / SOCOFing / LivDet / FVC | - | no licence, or licences that contradict the original terms | - | **not used** (would breach the original terms) |
+| pravsels/anguli_fingerprints_5k (HF) | 5,000 Anguli ids x 10 | no licence stated | public HF | not used (no licence) |
+| Anguli generator | 2012 Windows binary, `-ni` impressions | "free", licence text not published | download page | not run (unpublished licence, untrusted exe); in-repo generator used instead |
+| FPGAN-Control (Amazon) | GAN, multi-impression, trained on SD302 | no, CC-BY-NC-4.0 | GitHub + OneDrive weights | optional (needs a GPU or a CPU patch) |
+| PrintsGAN, SFinGe full | - | - | request / proprietary | needs the user |
+| PolyU contactless<->contact v1, 3D v2, low-res | 300 clients, 1,800 contactless + 1,800 contact images | no, "commercial use strictly prohibited" | online form + email | **needs the user** |
+| IIITD ISPFDv1/v2, UNFIT, MOLF, latent sets | smartphone finger-selfies, multi-sensor + latent | no, research only | signed licence by email (password-protected Drive zips) | **needs the user** |
+| UB RidgeBase | 88 people, >15k contactless/contact pairs | no, internal research | signed agreement by email | **needs the user** |
+| CASIA-FingerprintV5 | 500 x 8 fingers x 5, URU4000 | no | idealtest.org account | needs the user |
+| FVC2006, LivDet, Clarkson CITeR | multi-sensor / spoof | no | signed licence / email | needs the user |
+| LFIW, iCarB (Zenodo restricted), FNF fingerphoto | contact + phone + latent / in-car / flash-non-flash | no | Zenodo access request / email | needs the user |
+| SDUMLA-HMT, ZJU, NTNU, IITI, CFPose | - | - | host down, or not released | unavailable |
+
+## 6. Needs the user (nothing below was submitted on your behalf)
+
+1. **NIST SD302** (highest value: contact devices + contactless + raw phone photos 302f):
+   fill in https://nigos.nist.gov/datasets/sd302/request. A time-limited link is emailed.
+   Optionally do the same for SD300 (`/sd300/request`) and SD301 (`/sd301/request`). The
+   terms prohibit redistribution and require deletion on request.
+2. **PolyU contactless 2D <-> contact 2D v1** and **3D v2**: submit the forms at
+   `www4.comp.polyu.edu.hk/~csajaykr/database_request/ContactlessFP/` and `.../3DfingerprintV2/`.
+3. **IIITD ISPFDv2 / ISPFDv1 / UNFIT / MOLF**: download the licence PDF from
+   https://iab-rubric.org/resources/biometric-datasets/fingerprint. Have an institutional
+   signatory sign it, then email it to databases@iab-rubric.org with the subject line the
+   page gives. The password for the public Drive zip comes back by email.
+4. **RidgeBase**: sign
+   https://cubs.buffalo.edu/docs/UB-RidgeBase-database-release-agreement-08152022.pdf and
+   email it to cubs-ridgebase@buffalo.edu.
+5. **CASIA-V5**: register at www.idealtest.org and request dataset 7.
+6. **FVC2006**: send the licence, signed by permanent faculty, to atvs@uam.es with the
+   subject "[DATABASE download: FVC2006]". **LivDet**: email livdet@gmail.com.
+7. After receiving any of these, add an indexer in `data/indexers*.py` and rebuild.

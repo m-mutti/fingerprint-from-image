@@ -73,3 +73,42 @@ def render_contact_sheet(records: Sequence[Mapping[str, Any]], output: str | Pat
     target.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(target)
     return target
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Render one sheet per dataset found in ``<manifests>/*.jsonl`` (except all.jsonl)."""
+
+    import argparse
+    from collections import defaultdict as _dd
+
+    from .schema import read_manifest
+
+    parser = argparse.ArgumentParser(description="Render per-dataset contact sheets.")
+    parser.add_argument("--manifests", type=Path, default=Path("data/manifests"))
+    parser.add_argument("--out", type=Path, default=Path("runs/vision_qa/datasets"))
+    parser.add_argument("--datasets", default="", help="comma-separated dataset names")
+    parser.add_argument("--identities", type=int, default=8)
+    parser.add_argument("--impressions", type=int, default=12)
+    parser.add_argument("--seed", type=int, default=0)
+    args = parser.parse_args(argv)
+    wanted = set(filter(None, args.datasets.split(",")))
+    by_dataset: dict[str, list[dict[str, Any]]] = _dd(list)
+    for manifest in sorted(args.manifests.glob("*.jsonl")):
+        if manifest.name == "all.jsonl":
+            continue
+        for row in read_manifest(manifest):
+            if not wanted or row["dataset"] in wanted:
+                by_dataset[row["dataset"]].append(row)
+    for dataset, rows in sorted(by_dataset.items()):
+        originals = [r for r in rows if not r.get("variant")] or rows
+        target = render_contact_sheet(
+            originals, args.out / f"{dataset}.png", identities=args.identities,
+            impressions=args.impressions, seed=args.seed,
+            title=f"{dataset}: {len({r['identity'] for r in rows})} identities, "
+                  f"{len(rows)} images (rows = identities, X = excluded)")
+        print(target)  # noqa: T201 - CLI output
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

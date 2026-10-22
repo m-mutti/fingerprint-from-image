@@ -165,5 +165,20 @@ DATASETS: dict[str, DatasetSpec] = {
                 sha256="defefdd64aa2f403596792f1a1fbe880a29e5f853d12d39014f6ec86a4d329ea",
                 size=223_775_430),),
         ),
+        DatasetSpec(
+            slug="naijafingset",
+            title="NaijaFINGSET (Mendeley Data hzmn84khmh v2), 1,266 subjects, 1 impression",
+            license="CC-BY-4.0",
+            open_license=True,
+            terms_url="https://data.mendeley.com/datasets/hzmn84khmh/2",
+            terms="Mendeley data_licence: CC BY 4.0. SecuGen Hamster Plus scanner.",
+            files=(RemoteFile(
+                url="https://data.mendeley.com/public-api/zip/hzmn84khmh/download/2",
+                filename="naijafingset_v2.zip",
+                # Mendeley builds this zip on demand; if it is ever rebuilt the hash may
+                # change while the 10,266 images stay the same.
+                sha256="7d554f306e77904d5729993eccb3fb72749f93e076c5563cf9b752081314d278",
+                size=257_369_729),),
+        ),
     )
 }

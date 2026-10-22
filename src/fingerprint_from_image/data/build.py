@@ -30,6 +30,7 @@ from .indexers import (
     Draft,
     index_fvc,
     index_mendeley_family,
+    index_naijafingset,
     index_neurotech,
     index_socofing,
     index_tdfd,
@@ -55,6 +56,7 @@ def _indexers(args: argparse.Namespace) -> dict[str, Callable[[Path], Iterable[D
         "tdfd": index_tdfd,
         "neurotech": index_neurotech,
         "mendeley_family": index_mendeley_family,
+        "naijafingset": index_naijafingset,
         "unsw_2d3d": index_unsw_2d3d,
         "impose_syn": index_impose_syn,
         "l3sf": index_l3sf,
@@ -138,7 +140,7 @@ def build(args: argparse.Namespace) -> int:
         found = list(indexers[name](data_root))
         logger.info("%-18s %7d files indexed", name, len(found))
         rows.extend(found)
-    cache = ProbeCache(out_dir / ".cache" / "probes_v3.npz")
+    cache = ProbeCache(out_dir / ".cache" / "probes_v4.npz")
     probes = probe_all(rows, cache, args.workers)
     corrupt = [(r, p) for r, p in zip(rows, probes, strict=True) if not p.ok]
     kept = [(r, p) for r, p in zip(rows, probes, strict=True) if p.ok]

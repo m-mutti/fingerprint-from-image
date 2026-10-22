@@ -25,6 +25,7 @@ __all__ = [
     "draft",
     "index_fvc",
     "index_mendeley_family",
+    "index_naijafingset",
     "index_neurotech",
     "index_socofing",
     "index_tdfd",
@@ -157,8 +158,8 @@ def index_tdfd(data_root: Path) -> Iterator[Draft]:
                 impression=impression, sensor="FTIR video scanner", modality="contact_optical",
                 dpi=500, dpi_source="dataset page", license=DATASETS["tdfd"].license,
                 split_unit="all", split="train",
-                variant="" if impression == 1 else "distorted",
-                attributes={"frame": path.stem, "note": "folders may share a finger"},
+                attributes={"frame": path.stem, "distorted": impression > 1,
+                            "note": "folders may share a finger"},
             )
 
 
@@ -219,4 +220,33 @@ def index_mendeley_family(data_root: Path) -> Iterator[Draft]:
         )
 
 
-INDEXERS = ("fvc", "socofing", "tdfd", "neurotech", "mendeley_family")
+# --- NaijaFINGSET ---------------------------------------------------------------
+_NAIJA_FILE = re.compile(r"^(\d+)_([LR])([TIMRL])(?:\((\d+)\))?\.jpg$", re.I)
+_NAIJA_DIGIT = {"T": "thumb", "I": "index", "M": "middle", "R": "ring", "L": "little"}
+
+
+def index_naijafingset(data_root: Path) -> Iterator[Draft]:
+    """1,266 subjects, SecuGen Hamster Plus, ``<subject>_<hand><digit>.jpg``, 1 impression.
+
+    Mendeley Data hzmn84khmh (CC BY 4.0).  A few files carry a ``(1)`` suffix
+    (re-uploads); they are indexed as impression 2 and the dedup pass removes
+    byte-identical copies.  dpi is estimated from the ridge period.
+    """
+
+    root = data_root / "naijafingset"
+    for path in sorted(root.rglob("*.jpg")):
+        match = _NAIJA_FILE.match(path.name)
+        if not match:
+            continue
+        subject, hand, digit, copy = match.groups()
+        yield draft(
+            path, dataset="naijafingset", subject=str(int(subject)),
+            finger=canonical_finger("left" if hand.upper() == "L" else "right",
+                                    _NAIJA_DIGIT[digit.upper()]),
+            impression=1 + int(copy or 0), sensor="SecuGen Hamster Plus",
+            modality="contact_optical", dpi=500, dpi_source="estimate",
+            license=DATASETS["naijafingset"].license, split_unit=str(int(subject)),
+        )
+
+
+INDEXERS = ("fvc", "socofing", "tdfd", "neurotech", "mendeley_family", "naijafingset")
