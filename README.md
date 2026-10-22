@@ -1,3 +1,20 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
+    <img src="assets/wordmark-light.svg" alt="fingerprint-from-image" width="460">
+  </picture>
+</p>
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10%E2%80%933.13-3776AB">
+  <img alt="OpenCV" src="https://img.shields.io/badge/OpenCV-RootSIFT-5C3EE8">
+  <a href="docs/ROADMAP.md"><img alt="Roadmap" src="https://img.shields.io/badge/roadmap-v2-14B8A6"></a>
+</p>
+
+<p align="center">
+  <img src="assets/logo-animated.svg" alt="Animated fingerprint scan" width="160">
+</p>
+
 # Fingerprint extraction and matching from images
 
 This project provides an end-to-end, local fingerprint workflow:
@@ -32,11 +49,30 @@ python -m venv .venv
 # source .venv/bin/activate
 
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 ```
 
-Run the scripts from the repository root. Install the test dependencies with
-`python -m pip install -r requirements-dev.txt` when developing.
+This installs the `fingerprint_from_image` package and two console commands,
+`fingerprint-extract` and `fingerprint-match`. The original
+`python fingerprint_extraction.py ...` and `python fingerprint_matching.py ...`
+invocations, and `import fingerprint_matching`, keep working from a source
+checkout through thin compatibility shims. `requirements.txt` remains available
+for a minimal, non-editable install.
+
+### Project layout
+
+```text
+src/fingerprint_from_image/
+  extraction.py   hand-photo segmentation into fingerprint crops
+  features.py     ridge ROI, quality gates, RootSIFT template creation
+  pairwise.py     mutual ratio matching + affine RANSAC scoring
+  matcher.py      enrollment / identification / verification service
+  store.py        versioned SQLite template store
+  templates.py    template and result value types
+  cli/            fingerprint-extract and fingerprint-match entry points
+scripts/          reproducible asset / dataset tooling
+docs/ROADMAP.md   v2 plan and status
+```
 
 ## Extract fingerprints from a hand image
 
