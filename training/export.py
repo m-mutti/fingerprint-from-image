@@ -135,6 +135,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--prefix", default="fingerprint_embedder_v1")
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--skip", nargs="*", default=[], help="variants to skip")
+    parser.add_argument("--report-test", action="store_true",
+                        help="FROZEN release candidates only: also report FVC2004 DB_B for "
+                             "accepted files (never used for any decision)")
     args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -183,6 +186,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "ms_b32": latency(embed, size, batch=32, repeats=3)}
         print(name, json.dumps({k: v for k, v in report[name].items() if k != "val"}),  # noqa: T201
               "val pooled FNMR@0.1%", round(val["select"], 3))
+    if not args.report_test:
+        (args.out / f"{args.prefix}_export_report.json").write_text(json.dumps(report, indent=2))
+        return 0
     report["pytorch_fp32"]["fvc2004"] = evaluate_sets(torch_embed_fn(model), FVC_GROUPS["FVC2004"],
                                                       size=size)
     for name, entry in report.items():  # test numbers, computed once per accepted file

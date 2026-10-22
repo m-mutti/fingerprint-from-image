@@ -19,9 +19,10 @@ import logging
 from pathlib import Path
 
 from training.config import TrainConfig
+from training.content import digest, pixel_hashes
 from training.data import Sample, fvc_samples, socofing_samples, split_from_file, split_socofing
 from training.dedup import dedup_socofing, duplicate_groups
-from training.guards import check_train_samples, heldout_from_rows
+from training.guards import check_content, check_train_samples, heldout_from_rows
 from training.manifest import drop_variants, group_of, load_rows, rows_to_samples, val_groups
 from training.synth import synthetic_samples
 
@@ -93,10 +94,25 @@ def gather(cfg: TrainConfig) -> tuple[list[Sample], dict[str, list[Sample]], dic
         train, stats = _legacy(cfg)
     if cfg.data.synthetic_dir:
         train += synthetic_samples(Path(cfg.data.synthetic_dir))
-    heldout = heldout_from_rows(load_rows(manifest_dir, HELDOUT_MANIFESTS))
+    heldout_rows = load_rows(manifest_dir, HELDOUT_MANIFESTS)
+    heldout = heldout_from_rows(heldout_rows)
     sha_of = {s.path: s.sha256 for s in train if s.sha256}
     stats["heldout_guard"] = check_train_samples(train, heldout, sha_of)
-    val = val_groups(load_rows(manifest_dir, VAL_MANIFESTS))
+    val_rows = load_rows(manifest_dir, VAL_MANIFESTS)
+    val = val_groups(val_rows)
+    # audit C2: decoded-pixel hashes of EVERY training file vs all val and held-out content
+    all_val = [r["path"] for r in val_rows if r["split"] == "val"]
+    all_held = [r["path"] for r in heldout_rows if r["split"] == "heldout"]
+    hashes = pixel_hashes([s.path for s in train] + all_val + all_held)
+    stats["content_guard"] = check_content({s.path: hashes[s.path] for s in train},
+                                           {p: hashes[p] for p in all_val},
+                                           {p: hashes[p] for p in all_held})
+    stats["digests"] = {
+        "train_images_labels": digest([[hashes[s.path], s.label] for s in train]),
+        "val_images_labels": digest([[hashes[s.path], s.label]
+                                     for samples in val.values() for s in samples]),
+        "heldout_images": digest([hashes[p] for p in all_held]),
+    }
     train_ids = {s.label for s in train}
     stats["val_images_in_train_identities"] = sum(
         1 for samples in val.values() for s in samples if s.label in train_ids)

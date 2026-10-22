@@ -52,7 +52,7 @@ def _metrics(emb: np.ndarray, n_fingers: int) -> dict[str, float]:
 
 
 def evaluate_full(embed: EmbedFn, *, naive: bool = False, size: int = 256,
-                  workers: int = 8) -> dict:
+                  workers: int = 8, keep_scores: dict | None = None) -> dict:
     """Metrics per DB × subset plus means over the four DBs."""
 
     rows = [r for r in load_rows(ROOT / "data" / "manifests", ["FVC2004"])
@@ -67,6 +67,9 @@ def evaluate_full(embed: EmbedFn, *, naive: bool = False, size: int = 256,
             inputs = np.stack(list(pool.map(_prep, [(r["path"], naive, size) for r in chosen],
                                             chunksize=16)))[:, None].astype(np.float32)
             emb = embed(inputs)
+            if keep_scores is not None:  # raw (880, 880) cosine matrix, finger-major
+                unit = emb / np.linalg.norm(emb, axis=1, keepdims=True)
+                keep_scores[f"FVC2004_DB{db}"] = (unit @ unit.T).astype(np.float32)
             results[f"FVC2004_DB{db}"] = {
                 name: _metrics(emb[(lo - 1) * 8 : hi * 8], hi - lo + 1)
                 for name, (lo, hi) in SUBSETS.items()

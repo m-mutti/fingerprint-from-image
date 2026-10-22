@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import types
+import typing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -43,9 +45,8 @@ class DataConfig:
     socofing_val_subjects: int = 60  # used only when socofing_split_file is None
     dedup_threshold: float | None = 0.5  # ridge-band NCC; merges duplicate SOCOFing prints
     split_seed: int = 0
-    fvc_train_sets: tuple[str, ...] = (
-        "FVC2000_DB1_B", "FVC2000_DB2_B", "FVC2000_DB3_B", "FVC2000_DB4_B",
-    )
+    # legacy DB_B folders: empty by default - FVC2000/2002 DB_B are manifest VAL sets (audit C1)
+    fvc_train_sets: tuple[str, ...] = ()
     fvc_val_sets: tuple[str, ...] = (
         "FVC2002_DB1_B", "FVC2002_DB2_B", "FVC2002_DB3_B", "FVC2002_DB4_B",
     )
@@ -176,18 +177,37 @@ class TrainConfig:
         return dataclasses.asdict(self)
 
 
+def _coerce(value: Any, hint: Any, where: str) -> Any:
+    """Coerce a YAML/override value to the field's declared type.
+
+    YAML 1.1 reads ``5e-4`` as a string and ``45`` as an int where 45.0 is meant; both
+    would otherwise silently change behaviour and content keys.
+    """
+
+    if value is None:
+        return None
+    args = [a for a in typing.get_args(hint) if a is not type(None)]
+    base = args[0] if typing.get_origin(hint) in (typing.Union, types.UnionType) else hint
+    if base is float and isinstance(value, (int, str)) and not isinstance(value, bool):
+        return float(value)
+    if base is int and isinstance(value, str):
+        return int(value)
+    if base is bool and not isinstance(value, bool):
+        raise TypeError(f"{where}: expected a boolean, got {value!r}")
+    if typing.get_origin(base) is tuple and isinstance(value, list):
+        return tuple(value)
+    if typing.get_origin(base) is dict and isinstance(value, dict):
+        return {k: float(v) for k, v in value.items()}  # manifest shares
+    return value
+
+
 def _build(cls: type, values: dict[str, Any]) -> Any:
     kwargs: dict[str, Any] = {}
-    names = {f.name for f in dataclasses.fields(cls)}
-    defaults = cls()
+    hints = typing.get_type_hints(cls)
     for key, value in values.items():
-        if key not in names:
+        if key not in hints:
             raise KeyError(f"Unknown config key {cls.__name__}.{key}")
-        default = getattr(defaults, key)
-        if isinstance(default, tuple) and isinstance(value, list):
-            kwargs[key] = tuple(value)
-        else:
-            kwargs[key] = value
+        kwargs[key] = _coerce(value, hints[key], f"{cls.__name__}.{key}")
     return cls(**kwargs)
 
 
@@ -212,9 +232,12 @@ def config_from_dict(raw: dict[str, Any]) -> TrainConfig:
     nested = {"data": DataConfig, "aug": AugConfig, "model": ModelConfig,
               "loss": LossConfig, "optim": OptimConfig, "distill": DistillConfig}
     kwargs: dict[str, Any] = {}
+    hints = typing.get_type_hints(TrainConfig)
     for key, value in raw.items():
         if key in nested:
             kwargs[key] = _build(nested[key], value or {})
+        elif key in hints:
+            kwargs[key] = _coerce(value, hints[key], f"TrainConfig.{key}")
         else:
-            kwargs[key] = value
+            raise KeyError(f"Unknown config key TrainConfig.{key}")
     return TrainConfig(**kwargs)

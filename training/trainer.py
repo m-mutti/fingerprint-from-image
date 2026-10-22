@@ -25,6 +25,7 @@ from training.augment import Augmenter
 from training.config import TrainConfig
 from training.losses import MarginLoss, aux_pair_loss
 from training.model import EmbeddingNet
+from training.runtime import atomic_replace
 from training.sampler import PKSampler
 from training.train_utils import GpuMonitor, cosine_lr, load_model
 
@@ -140,7 +141,7 @@ class Trainer:
     def save_state(self) -> None:
         tmp = self.run_dir / "state.pt.tmp"
         torch.save(self.state_dict(), tmp)
-        tmp.replace(self.run_dir / "state.pt")
+        atomic_replace(tmp, self.run_dir / "state.pt")
 
     def load_state(self) -> bool:
         path = self.run_dir / "state.pt"

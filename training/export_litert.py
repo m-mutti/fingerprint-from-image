@@ -116,6 +116,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--calib", type=int, default=256)
     parser.add_argument("--reuse", action="store_true", help="keep existing .tflite files")
+    parser.add_argument("--report-test", action="store_true",
+                        help="FROZEN release candidates only: report FVC2004 for accepted files")
     args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -163,7 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                  "val": val, "accepted": bool(ok),
                  "ms_b1": _latency(run, size, 1, 20), "ms_b32": _latency(run, size, 32, 2),
                  "runtime": "ai-edge-litert (XNNPACK, WSL2 Linux)"}
-        if ok:  # FVC2004 reported once, only for accepted files
+        if ok and args.report_test:  # frozen release candidates only, reporting only
             entry["fvc2004"] = evaluate_sets(run, FVC_GROUPS["FVC2004"], size=size)
         report[name] = entry
         print(name, json.dumps({k: v for k, v in entry.items()  # noqa: T201

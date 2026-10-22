@@ -17,6 +17,7 @@ import torch
 
 from training.config import TrainConfig, config_from_dict
 from training.model import EmbeddingNet, NormalizedEmbedder
+from training.runtime import atomic_replace
 
 __all__ = [
     "GpuMonitor",
@@ -112,7 +113,7 @@ def save_checkpoint(path: Path, model: torch.nn.Module, cfg: TrainConfig,
 
     tmp = Path(str(path) + ".tmp")
     torch.save({"config": cfg.to_dict(), "model": model.state_dict(), **extra}, tmp)
-    tmp.replace(path)  # atomic: a crash never leaves a truncated checkpoint
+    atomic_replace(tmp, path)  # atomic + retried on WinError 5/32
 
 
 def load_model(path: Path, device: str = "cpu") -> tuple[NormalizedEmbedder, TrainConfig]:

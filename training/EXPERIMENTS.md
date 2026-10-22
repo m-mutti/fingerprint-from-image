@@ -17,10 +17,13 @@ Every number below comes from a command recorded next to it.
 | item | choice |
 |---|---|
 | data | shared manifests `data/manifests/*.jsonl` (rows with `exclude: true` dropped; 157 cross-dataset duplicate groups resolved by the data agent) |
-| held-out test | FVC2004 (`split == heldout`): DB1–4 B (10 fingers/DB, comparable with the classic/SourceAFIS table) **and** FVC2004 full (110 fingers/DB; DB_A = fingers 1–100). Never read by training, selection, thresholds or preprocessing choices; enforced in code (`training/guards.py`) |
+| held-out test (protocol v1, frozen) | **primary:** mean EER over FVC2004 DB1–4 **full** (110 fingers × 8 per DB), FVC impostors, finger-level bootstrap 95 % CI, paired bootstrap difference vs SourceAFIS (10.29 % [9.17, 11.44]); also FMR1000 (all impostors), DB_A-only EER, FVC2004 DB_B (continuity) — all with CIs, raw scores stored (`python -m training.evaluate --release-candidate`). **Evaluated only for frozen release candidates; never informs any decision** (selection, thresholds, quantisation, ablations) |
+| leakage guards | training refuses held-out identities/paths/manifest hashes **and** any image whose decoded pixels match a held-out or val image (all training files hashed, `training/content.py`); val identities may not be trained on; legacy FVC DB_B training sets are off by default (audit C1/C2) |
 | training | manifest `train` split; per-source epoch shares (`data.manifest_train`) |
 | selection | manifest `val` identities only: contact FVC2000/2002 DB1–3 (fingers 101–110) + neurotech. **Primary** = pooled FNMR @ FMR 0.1 % with one global threshold; **secondary** = mean per-set EER; per-sensor EERs (also FVC DB4, l3sf, SOCOFing) logged every evaluation |
-| test metrics | genuine = all same-finger pairs; impostor "fvc" = first impressions across fingers, "all" = every cross-finger pair; EER on both, FMR100/FMR1000/ZeroFMR on "all" (`training/eval_fvc.py`, `training/eval_full.py`, keyed in `training/evaluate.py`) |
+| final checkpoint | `selected.pt` = `last.pt` unless `best.pt` beats it on the pooled val metric by > 2 bootstrap SD (finger-level paired bootstrap) |
+| pair definitions | genuine = all same-finger pairs; impostor "fvc" = first impressions across fingers, "all" = every cross-finger pair (`training/eval_fvc.py`, `training/eval_full.py`) |
+| manifests | frozen as protocol v1 (the reproduced DeepPrint baseline uses the same ones) |
 
 ## Legacy-protocol results (artefacts lost; for the record only)
 
@@ -59,14 +62,16 @@ Estimator robustness (vision-QA finding: ~5.5 % of SOCOFing images, mostly Alter
 got 10–24 px and shrank to a blob). Variants compared on SOCOFing train images
 (every 4th Real, every 12th Altered) and FVC2000+FVC2002 DB_B (8 sets × 10 fingers × 8
 impressions); fail = estimate > 4.5 px on SOCOFing; FVC columns = mean within-finger
-relative std and 95th percentile of the per-finger max/min ratio.
-`python -m training.period_study --no-2004`:
+relative std and 95th percentile of the per-finger max/min ratio. Frozen on val-only
+evidence with the runtime prior (`_MIN_RIDGES = 16`: a print spans ≥ 16 ridges on its long
+side — relaxed from 20 so small high-dpi L3-SF prints, ≈ 18 ridges, are not clamped).
+`python -m training.period_study` (FVC2004 excluded by default):
 
 | estimator | SOCOFing Real fail | SOCOFing Altered fail | FVC within-finger rel. std | FVC p95 max/min ratio |
 |---|---|---|---|---|
 | global spectrum (v1) | 1.25 % | 6.79 % | 0.055 | 1.43 |
-| global + size prior (≥ 20 ridges across the long side) | 0.92 % | 1.00 % | 0.057 | 1.43 |
-| **Welch (unit-energy block spectra) + size prior (adopted)** | **0.75 %** | **0.88 %** | 0.037 | 1.29 |
+| global + size prior (≥ 16 ridges) | 1.08 % | 2.04 % | 0.056 | 1.45 |
+| **Welch (unit-energy block spectra) + size prior (adopted)** | **0.75 %** | **0.79 %** | 0.033 | 1.28 |
 | Welch without prior | 1.83 % | 6.67 % | 0.033 | 1.24 |
 
 The choice uses SOCOFing and FVC2000/2002 only. Disclosure: an earlier scratch run of the
@@ -212,6 +217,12 @@ the 411.7 img/s benchmark above. One-off compile cost ≈ 4 min (epoch 1: 304 s)
 | ML #3 positives in batch | P×K (K=4) + SupCon/MS aux loss (A3); AdaFace switch (A5) |
 | ML #4 distortion aug | A4 retune (elastic 0.06, translate 0.15, partial 0.4, polarity 0); no sweep-sensor aug |
 | ML #7 schedule | B 96 via probe, EMA 0.9995, eval every 4, early stop |
+| audit C1 legacy trains on val | `fvc_train_sets` empty by default; overlap now checked by content, not labels (negative control: 80 FVC2000 DB1_B images rejected) |
+| audit C2 pixel copies of FVC2004 | decoded-pixel hash of every training file vs all val + held-out images; A1 mix: 75,891 train vs 7,783 val + 3,520 held-out → 0 matches |
+| audit P0 test informs decisions | export/LiteRT acceptance on val only; FVC2004 only with `--report-test` / `evaluate --release-candidate`; `summarize` is val-only |
+| audit selection | `selected.pt` rule (last unless best > 2 bootstrap SD); pooled FNMR@FMR1e-3 + mean EER logged |
+| audit keys/queue MVP | typed config coercion (`5e-4` was a string), root-relative paths, image-hash + label / val / held-out digests and untracked-code hash in the train key; OS-level GPU lock (`runs/gpu.lock`, held by `training.train`); atomic writes with WinError 5/32 retry; heartbeats in gather/cache/probe/validator/epoch/validation/release phases; sweeps and LiteRT-in-queue deferred |
+| audit protocol v1 eval | `evaluate.protocol_v1`: full / DB_A / DB_B FVC-impostor EER with finger-level bootstrap CI (B = 2000), paired difference vs reference score matrices when supplied (SourceAFIS full-DB scores are not committed — needs the auditor's `scores.npz`), raw score matrices stored |
 
 ## Plan (queued when the GPU is released)
 

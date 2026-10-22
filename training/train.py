@@ -27,12 +27,14 @@ import numpy as np
 import torch
 import yaml
 
-from training.config import TrainConfig, load_config
+from training.config import ROOT, TrainConfig, load_config
 from training.data import build_cache
 from training.keys import StepDir, code_version
 from training.licences import lineage
 from training.plots import write_plots
 from training.registry import Registry
+from training.release import choose_release
+from training.runtime import GpuLock, Heartbeat
 from training.sources import gather, source_group, train_shares
 from training.train_utils import environment, save_checkpoint, set_seed, setup_logging
 from training.trainer import TrainData, Trainer, TrainingAborted
@@ -42,14 +44,30 @@ logger = logging.getLogger("training.train")
 _VOLATILE = ("name", "out_dir", "log_every", "num_threads")
 
 
-def train_inputs(cfg: TrainConfig, cache_key: str, heldout_digest: str, batch: int,
+def _relative(value: object) -> object:
+    """Config values with paths under the project root made root-relative (portable keys)."""
+
+    if isinstance(value, dict):
+        return {k: _relative(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_relative(v) for v in value]
+    if isinstance(value, str):
+        root = ROOT.as_posix().lower().rstrip("/") + "/"
+        posix = value.replace("\\", "/")
+        if posix.lower().startswith(root):
+            return "<ROOT>/" + posix[len(root):]
+    return value
+
+
+def train_inputs(cfg: TrainConfig, cache_key: str, stats: dict, batch: int,
                  accum: int) -> dict:
     """Everything that determines the trained weights (the ``train`` content key)."""
 
-    config = {k: v for k, v in cfg.to_dict().items() if k not in _VOLATILE}
+    config = _relative({k: v for k, v in cfg.to_dict().items() if k not in _VOLATILE})
     code = code_version()
     return {"config": config, "cache": cache_key, "code_py_sha256": code["py_sha256"],
-            "heldout_digest": heldout_digest, "batch": batch, "accum": accum}
+            "heldout_digest": stats["heldout_guard"]["heldout_digest"],
+            "data_digests": stats["digests"], "batch": batch, "accum": accum}
 
 
 def _resolve_batch(cfg: TrainConfig, num_classes: int) -> tuple[int, int, dict | None]:
@@ -71,17 +89,33 @@ def _resolve_batch(cfg: TrainConfig, num_classes: int) -> tuple[int, int, dict |
 
 
 def train(cfg: TrainConfig, *, force: bool = False) -> Path:
-    """Run (or skip / resume) one training step; returns its directory."""
+    """Run (or skip / resume) one training step; returns its directory.
+
+    Data gathering, content hashing and the cache build run without the GPU lock (so they
+    overlap with another job's training); probe + training hold :class:`GpuLock`.
+    """
 
     set_seed(cfg.seed)
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision("high")
-    samples, val_sets, stats = gather(cfg)
+    beat = Heartbeat(Path(os.environ["FFI_HEARTBEAT"]) if os.environ.get("FFI_HEARTBEAT")
+                     else None)
+    with beat.phase("gather"):
+        samples, val_sets, stats = gather(cfg)
+    with beat.phase("cache"):
+        arrays, cache_key = build_cache(samples, canvas=cfg.data.canvas,
+                                        naive=cfg.data.naive_resize)
+    with GpuLock():
+        return _train_locked(cfg, samples, val_sets, stats, arrays, cache_key, beat, force)
+
+
+def _train_locked(cfg: TrainConfig, samples: list, val_sets: dict, stats: dict, arrays: dict,
+                  cache_key: str, beat: Heartbeat, force: bool) -> Path:
     classes = sorted({s.label for s in samples})
     index = {c: i for i, c in enumerate(classes)}
-    arrays, cache_key = build_cache(samples, canvas=cfg.data.canvas, naive=cfg.data.naive_resize)
-    batch, accum, probe = _resolve_batch(cfg, len(classes))
-    inputs = train_inputs(cfg, cache_key, stats["heldout_guard"]["heldout_digest"], batch, accum)
+    with beat.phase("probe"):
+        batch, accum, probe = _resolve_batch(cfg, len(classes))
+    inputs = train_inputs(cfg, cache_key, stats, batch, accum)
     step = StepDir.for_inputs("train", inputs)
     registry = Registry()
     shares = train_shares(cfg)
@@ -93,7 +127,7 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
     if force:  # retrain from scratch: move previous state/checkpoints aside, never resume them
         step.invalidate()
         attic = run_dir / "attic" / time.strftime("%Y%m%d_%H%M%S")
-        for name in ("state.pt", "best.pt", "last.pt", "metrics.jsonl", "plots"):
+        for name in ("state.pt", "best.pt", "last.pt", "selected.pt", "metrics.jsonl", "plots"):
             if (run_dir / name).exists():
                 attic.mkdir(parents=True, exist_ok=True)
                 (run_dir / name).replace(attic / name)
@@ -112,17 +146,19 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
                      torch.from_numpy(arrays["valid_box"].astype(np.int64)),
                      torch.tensor([index[s.label] for s in samples]),
                      [source_group(s) for s in samples])
-    heartbeat = Path(os.environ["FFI_HEARTBEAT"]) if os.environ.get("FFI_HEARTBEAT") else None
-    trainer = Trainer(cfg, run_dir, data, batch, accum, shares, heartbeat)
+    trainer = Trainer(cfg, run_dir, data, batch, accum, shares, beat.path)
     trainer.load_state()
-    validator = Validator(val_sets, naive=cfg.data.naive_resize, size=cfg.input_size)
+    with beat.phase("validator"):
+        validator = Validator(val_sets, naive=cfg.data.naive_resize, size=cfg.input_size)
     try:
         while trainer.epoch < cfg.optim.epochs:
-            record = trainer.train_epoch()
+            with beat.phase("epoch", max_seconds=1800):  # covers torch.compile in epoch 1
+                record = trainer.train_epoch()
             scores: dict = {}
             stop = False
             if trainer.epoch % cfg.eval_every == 0 or trainer.epoch == cfg.optim.epochs:
-                val, scores = validator(trainer.embed)
+                with beat.phase("validation"):
+                    val, scores = validator(trainer.embed)
                 torch.cuda.empty_cache()
                 record["val"] = val
                 current = (val["select"], val["select_eer"])
@@ -144,6 +180,8 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
                 logger.info("early stop: no pooled-val improvement in %d evaluations",
                             cfg.optim.early_stop_patience)
                 break
+        with beat.phase("release"):
+            release = choose_release(run_dir, validator)
     except TrainingAborted as exc:
         registry.upsert("train", step.key, "failed", reason=exc.reason)
         raise
@@ -151,14 +189,16 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
         reason = "oom" if isinstance(exc, torch.cuda.OutOfMemoryError) else type(exc).__name__
         registry.upsert("train", step.key, "failed", reason=f"{reason}: {exc}"[:500])
         raise
-    outputs = ["best.pt", "last.pt", "metrics.jsonl"]
+    logger.info("release checkpoint: %s", release)
+    outputs = ["best.pt", "last.pt", "selected.pt", "metrics.jsonl"]
     extra = {"best_val": {"select": trainer.best[0], "select_eer": trainer.best[1]},
              "epochs_run": trainer.epoch, "batch": batch, "accum": accum, "probe": probe,
-             "data": stats, "licence": licence, "classes": len(classes)}
+             "release": release, "data": stats, "licence": licence, "classes": len(classes)}
     step.mark_done(inputs, outputs, extra, started)
     registry.upsert("train", step.key, "done",
-                    metrics={"val_select": trainer.best[0], "val_select_eer": trainer.best[1]},
-                    artifacts={"dir": str(run_dir), "best": str(run_dir / "best.pt")})
+                    metrics={"val_select": trainer.best[0], "val_select_eer": trainer.best[1],
+                             "release": release["selected"]},
+                    artifacts={"dir": str(run_dir), "selected": str(run_dir / "selected.pt")})
     logger.info("best val: pooled FNMR@FMR0.1%% = %.3f%%, mean EER = %.3f%% (%s)",
                 trainer.best[0], trainer.best[1], run_dir)
     return run_dir

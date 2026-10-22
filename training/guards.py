@@ -20,6 +20,7 @@ from training.keys import canonical_json
 __all__ = [
     "ContaminationError",
     "HeldOut",
+    "check_content",
     "check_selection_rows",
     "check_train_samples",
     "heldout_from_rows",
@@ -75,6 +76,26 @@ def check_train_samples(samples: Sequence[Sample], heldout: HeldOut,
         raise ContaminationError(f"{len(hits)} training images are held-out data, e.g. {hits[0]}")
     return {"heldout_digest": heldout.digest, "heldout_overlap": 0,
             "heldout_identities": len(heldout.identities)}
+
+
+def check_content(train: dict[str, str], val: dict[str, str], heldout: dict[str, str]) -> dict:
+    """Hard-fail when any training image has the same decoded pixels as a val/held-out image.
+
+    Arguments map file paths to pixel hashes (:func:`training.content.pixel_hashes`).
+    """
+
+    train_by_hash = {h: p for p, h in train.items()}
+    for name, other in (("held-out", heldout), ("validation", val)):
+        hits = [(train_by_hash[h], p) for p, h in other.items() if h in train_by_hash]
+        if hits:
+            raise ContaminationError(f"{len(hits)} training images are pixel-identical to "
+                                     f"{name} images, e.g. {hits[0][0]} == {hits[0][1]}")
+    val_by_hash = set(val.values())
+    leak = [p for p, h in heldout.items() if h in val_by_hash]
+    if leak:
+        raise ContaminationError(f"{len(leak)} held-out images also appear in validation")
+    return {"train_images": len(train), "val_images": len(val), "heldout_images": len(heldout),
+            "content_overlap": 0}
 
 
 def check_selection_rows(rows: Iterable[dict]) -> None:

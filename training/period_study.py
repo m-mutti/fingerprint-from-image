@@ -4,8 +4,8 @@ Compares the v1 global-spectrum estimator, v1 + print-size prior, and the
 runtime Welch estimator (``preprocess.estimate_ridge_period``) with and without
 the prior. Reproduces the estimator table in ``training/EXPERIMENTS.md``::
 
-    python -m training.period_study            # all FVC sets (as originally run)
-    python -m training.period_study --no-2004  # FVC2000/2002 only
+    python -m training.period_study                 # FVC2000/2002 only (default)
+    python -m training.period_study --include-2004  # also the held-out FVC2004 (audit only)
 """
 
 from __future__ import annotations
@@ -76,13 +76,14 @@ def _run(args: tuple[str, str]) -> list[float]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--no-2004", action="store_true", help="exclude FVC2004 (test) sets")
+    parser.add_argument("--include-2004", action="store_true",
+                        help="also read the held-out FVC2004 sets (never for decisions)")
     args = parser.parse_args()
     data = ROOT / "data"
     base = data / "socofing" / "socofing" / "train"
     soco = sorted(str(p) for p in base.glob("Real/*.BMP"))[::4]
     soco += sorted(str(p) for p in base.glob("Altered/*/*.BMP"))[::12]
-    years = ("2000", "2002") if args.no_2004 else ("2000", "2002", "2004")
+    years = ("2000", "2002", "2004") if args.include_2004 else ("2000", "2002")
     sets = [f"FVC{y}_DB{i}_B" for y in years for i in range(1, 5)]
     fvc = [str(data / "fvc" / s / f"{f}_{i}.tif") for s in sets
            for f in range(101, 111) for i in range(1, 9)]
