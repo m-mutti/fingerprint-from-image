@@ -24,7 +24,7 @@ import numpy as np
 import onnx
 import torch
 
-from training.data import Sample, fvc_samples, load_gray, model_input, socofing_samples
+from training.data import calibration_inputs
 from training.eval_fvc import (
     FVC_GROUPS,
     _onnx_embed,
@@ -34,11 +34,8 @@ from training.eval_fvc import (
 )
 from training.train_utils import load_model
 
-__all__ = ["calibration_inputs", "export_onnx", "main"]
+__all__ = ["export_onnx", "main"]
 
-DATA = Path("E:/Personal_tries/Mutti_Finger_Prints/data")
-SPLIT = Path("E:/Personal_tries/Mutti_Finger_Prints/benchmarks/splits/"
-             "socofing_subject_split_seed0.json")
 
 
 def _sha256(path: Path) -> str:
@@ -70,18 +67,6 @@ def export_onnx(model: torch.nn.Module, path: Path, size: int, metadata: dict[st
         entry = proto.metadata_props.add()
         entry.key, entry.value = key, value
     onnx.save(proto, str(path))
-
-
-def calibration_inputs(n: int = 256, seed: int = 0) -> np.ndarray:
-    """Preprocessed images from the *training* split only (SOCOFing train subjects + FVC2000)."""
-
-    spec = json.loads(SPLIT.read_text(encoding="utf-8"))
-    train_subjects = {f"soco_{s}" for s in spec["subjects"]["train"]}
-    pool: list[Sample] = [s for s in socofing_samples(DATA) if s.subject in train_subjects]
-    pool += fvc_samples(DATA, FVC_GROUPS["FVC2000"]) * 10  # weight multi-sensor data up
-    rng = np.random.default_rng(seed)
-    chosen = [pool[i] for i in rng.choice(len(pool), size=n, replace=False)]
-    return np.stack([model_input(load_gray(s.path, s.source)) for s in chosen])[:, None]
 
 
 class _Reader:

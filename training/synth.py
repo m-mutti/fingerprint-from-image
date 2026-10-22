@@ -112,16 +112,24 @@ def _grow(theta: torch.Tensor, period: torch.Tensor, gen: torch.Generator,
 
     n = theta.shape[0]
     ksize = int(2 * math.ceil(float(period.max())) + 1)
-    bank = _gabor_bank(period, ksize)
+    r_pad = ksize // 2
+    side = SIZE + 2 * r_pad
+    # FFT convolution (kernels are even, so correlation == convolution): one rfft2 of the
+    # padded field per iteration instead of n*BINS grouped spatial convolutions.
+    bank = _gabor_bank(period, ksize).reshape(n, BINS, ksize, ksize)
+    placed = torch.zeros(n, BINS, side, side, device=theta.device)
+    placed[:, :, :ksize, :ksize] = bank
+    placed = torch.roll(placed, shifts=(-r_pad, -r_pad), dims=(2, 3))
+    bank_f = torch.fft.rfft2(placed)
     pos = theta / math.pi * BINS
     i0 = torch.floor(pos).long() % BINS
     i1 = (i0 + 1) % BINS
     w = (pos - torch.floor(pos))[:, None]
     x = torch.randn(n, 1, SIZE, SIZE, generator=gen, device=theta.device) * 0.5
     for _ in range(iterations):
-        padded = F.pad(x.reshape(1, n, SIZE, SIZE), (ksize // 2,) * 4, mode="reflect")
-        padded = padded.repeat_interleave(BINS, dim=1)
-        resp = F.conv2d(padded, bank, groups=n * BINS).reshape(n, BINS, SIZE, SIZE)
+        padded = F.pad(x, (r_pad,) * 4, mode="reflect")
+        full = torch.fft.irfft2(torch.fft.rfft2(padded) * bank_f, s=(side, side))
+        resp = full[:, :, r_pad : r_pad + SIZE, r_pad : r_pad + SIZE]
         r = (1 - w) * resp.gather(1, i0[:, None]) + w * resp.gather(1, i1[:, None])
         r = r / (r.flatten(1).std(dim=1)[:, None, None, None] + 1e-6)
         x = torch.tanh(2.0 * r)

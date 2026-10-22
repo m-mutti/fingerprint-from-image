@@ -47,6 +47,7 @@ from training.train_utils import (
     GpuMonitor,
     cosine_lr,
     environment,
+    load_model,
     save_checkpoint,
     set_seed,
     setup_logging,
@@ -126,6 +127,19 @@ def _optimizer(net: EmbeddingNet, criterion: MarginLoss, cfg: TrainConfig) -> to
     ], fused=True)
 
 
+def _distill_loss(teacher: torch.nn.Module, x: torch.Tensor, emb: torch.Tensor,
+                  cfg: TrainConfig) -> torch.Tensor:
+    """Cosine + relational (in-batch similarity) distillation towards a frozen teacher."""
+
+    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        target = teacher(x.contiguous(memory_format=torch.channels_last)).float()
+    student = F.normalize(emb.float(), dim=1)
+    target = F.normalize(target, dim=1)
+    cosine = (1.0 - (student * target).sum(dim=1)).mean()
+    relational = F.mse_loss(student @ student.T, target @ target.T)
+    return cfg.distill.w_cos * cosine + cfg.distill.w_rel * relational
+
+
 def _append(path: Path, record: dict) -> None:
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record) + "\n")
@@ -178,6 +192,12 @@ def train(cfg: TrainConfig) -> Path:
     margin_ramp = cfg.loss.margin_warmup_epochs * steps_per_epoch  # linear per-step ramp
     params = list(net.parameters())
     gpu = GpuMonitor()
+    teacher = None
+    if cfg.distill.teacher:
+        teacher, teacher_cfg = load_model(Path(cfg.distill.teacher), "cuda")
+        teacher = teacher.to(memory_format=torch.channels_last)
+        if teacher_cfg.model.dim != cfg.model.dim:
+            raise ValueError("student and teacher embedding dims must match")
 
     val_cache: dict[str, np.ndarray] = {}
     soco_inputs = _soco_val_inputs(soco_val, cfg.data.naive_resize) if soco_val else None
@@ -213,6 +233,8 @@ def train(cfg: TrainConfig) -> Path:
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 emb = forward(x.contiguous(memory_format=torch.channels_last))
             loss = criterion(emb.float(), y)
+            if teacher is not None:
+                loss = cfg.distill.w_arc * loss + _distill_loss(teacher, x, emb, cfg)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(params, cfg.optim.grad_clip)

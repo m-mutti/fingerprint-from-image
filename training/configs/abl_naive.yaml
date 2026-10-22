@@ -1,0 +1,6 @@
+# Ablation: no ridge-period normalisation (fit longer side to 90% of 256 px).
+name: abl_naive
+data:
+  naive_resize: true
+optim:
+  epochs: 10

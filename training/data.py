@@ -25,6 +25,7 @@ from fingerprint_from_image.embedding import preprocess as pp
 __all__ = [
     "Sample",
     "build_cache",
+    "calibration_inputs",
     "fvc_samples",
     "load_gray",
     "model_input",
@@ -205,3 +206,20 @@ def build_cache(
     logger.info("cache: %d / %d images have rescaled extent < 100 px", small, len(samples))
     np.savez(path, **arrays)
     return arrays
+
+
+def calibration_inputs(n: int = 256, seed: int = 0) -> np.ndarray:
+    """Preprocessed images from the *training* split only (SOCOFing train subjects + FVC2000)."""
+
+    from training.config import ROOT
+
+    data = ROOT / "data"
+    split = ROOT / "benchmarks" / "splits" / "socofing_subject_split_seed0.json"
+    spec = json.loads(split.read_text(encoding="utf-8"))
+    train_subjects = {f"soco_{s}" for s in spec["subjects"]["train"]}
+    pool: list[Sample] = [s for s in socofing_samples(data) if s.subject in train_subjects]
+    fvc2000 = [f"FVC2000_DB{i}_B" for i in range(1, 5)]
+    pool += fvc_samples(data, fvc2000) * 10  # up-weight the multi-sensor images
+    rng = np.random.default_rng(seed)
+    chosen = [pool[i] for i in rng.choice(len(pool), size=n, replace=False)]
+    return np.stack([model_input(load_gray(s.path, s.source)) for s in chosen])[:, None]

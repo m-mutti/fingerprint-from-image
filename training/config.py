@@ -13,6 +13,7 @@ import yaml
 __all__ = [
     "AugConfig",
     "DataConfig",
+    "DistillConfig",
     "LossConfig",
     "ModelConfig",
     "OptimConfig",
@@ -114,6 +115,16 @@ class OptimConfig:
 
 
 @dataclass(frozen=True)
+class DistillConfig:
+    """Optional knowledge distillation from a trained teacher checkpoint."""
+
+    teacher: str | None = None  # path to teacher best.pt (same embedding dim)
+    w_arc: float = 1.0  # identity margin loss
+    w_cos: float = 4.0  # 1 - cos(student, teacher)
+    w_rel: float = 4.0  # MSE between in-batch similarity matrices
+
+
+@dataclass(frozen=True)
 class TrainConfig:
     """Top-level experiment config."""
 
@@ -130,6 +141,7 @@ class TrainConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     loss: LossConfig = field(default_factory=LossConfig)
     optim: OptimConfig = field(default_factory=OptimConfig)
+    distill: DistillConfig = field(default_factory=DistillConfig)
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view for logging and checkpoints."""
@@ -171,7 +183,7 @@ def config_from_dict(raw: dict[str, Any]) -> TrainConfig:
     """Build a :class:`TrainConfig` from nested plain dicts (YAML or checkpoint)."""
 
     nested = {"data": DataConfig, "aug": AugConfig, "model": ModelConfig,
-              "loss": LossConfig, "optim": OptimConfig}
+              "loss": LossConfig, "optim": OptimConfig, "distill": DistillConfig}
     kwargs: dict[str, Any] = {}
     for key, value in raw.items():
         if key in nested:

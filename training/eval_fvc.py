@@ -22,13 +22,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from training.config import ROOT
 from training.data import model_input
 from training.metrics import fvc_pairs, verification_metrics
 
 __all__ = ["EmbedFn", "evaluate_sets", "fvc_scores", "load_fvc_inputs", "main"]
 
 EmbedFn = Callable[[np.ndarray], np.ndarray]  # (N, 1, S, S) float32 → (N, D) unit norm
-DATA = Path("E:/Personal_tries/Mutti_Finger_Prints/data/fvc")
+DATA = ROOT / "data" / "fvc"  # override the root with $FFI_ROOT (e.g. /mnt/e/... under WSL)
 FVC_GROUPS = {
     "FVC2000": [f"FVC2000_DB{i}_B" for i in range(1, 5)],
     "FVC2002": [f"FVC2002_DB{i}_B" for i in range(1, 5)],
