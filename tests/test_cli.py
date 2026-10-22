@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import cv2 as cv
+
 from conftest import affine_variant, synthetic_fingerprint
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

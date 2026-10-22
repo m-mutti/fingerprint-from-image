@@ -1,0 +1,36 @@
+# GitHub Actions CI. To activate, move this file to .github/workflows/ci.yml.
+# Pushing workflow files requires a token with the `workflow` scope
+# (e.g. `gh auth refresh -s workflow`).
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx ruff@0.12.0 check .
+
+  test:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv pip install -e ".[dev]"
+      - run: uv run --no-sync pytest --cov=fingerprint_from_image --cov-report=term-missing

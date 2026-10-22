@@ -10,3 +10,12 @@ venv/
 *.db-wal
 extracted/
 
+
+# Local datasets, model artifacts, and benchmark outputs
+data/
+runs/
+*.onnx.data
+.ruff_cache/
+dist/
+build/
+*.egg-info/

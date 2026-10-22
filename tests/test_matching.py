@@ -8,8 +8,6 @@ from pathlib import Path
 import cv2 as cv
 import numpy as np
 import pytest
-from conftest import affine_variant, synthetic_fingerprint
-
 from fingerprint_extraction import ExtractionConfig, FingerprintCrop
 from fingerprint_matching import (
     APPLICATION_ID,
@@ -22,6 +20,8 @@ from fingerprint_matching import (
     create_template,
     match_templates,
 )
+
+from conftest import affine_variant, synthetic_fingerprint
 
 
 def test_template_creation_is_deterministic_and_rejects_blank_images() -> None:
@@ -274,7 +274,7 @@ def test_partial_hand_query_cannot_reduce_the_evidence_quorum(
         )
         for index in range(1, 4)
     )
-    monkeypatch.setattr("fingerprint_matching.extract_fingerprints", lambda *_args: crops)
+    monkeypatch.setattr("fingerprint_from_image.matcher.extract_fingerprints", lambda *_args: crops)
 
     with FingerprintMatcher(tmp_path / "partial-query.db") as matcher:
         matcher.enroll("alice", enrolled, finger="index", kind="cropped")
@@ -297,7 +297,7 @@ def test_hand_enrollment_is_atomic_when_one_crop_fails(
         )
         for index in range(4)
     ]
-    monkeypatch.setattr("fingerprint_matching.extract_fingerprints", lambda *_args: crops)
+    monkeypatch.setattr("fingerprint_from_image.matcher.extract_fingerprints", lambda *_args: crops)
 
     with FingerprintMatcher(tmp_path / "atomic-hand.db") as matcher:
         report = matcher.enroll_hand(

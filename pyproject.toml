@@ -1,12 +1,66 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fingerprint-from-image"
+dynamic = ["version"]
+description = "Extract, enroll, and match fingerprints from hand photographs and fingerprint scans."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "See repository" }
+authors = [{ name = "m-mutti" }]
+keywords = ["fingerprint", "biometrics", "opencv", "sift", "onnx", "computer-vision"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python>=4.8",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.8"]
+dev = [
+    "matplotlib>=3.8",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.12",
+]
+
+[project.scripts]
+fingerprint-match = "fingerprint_from_image.cli.match:main"
+fingerprint-extract = "fingerprint_from_image.cli.extract:main"
+
+[project.urls]
+Homepage = "https://github.com/m-mutti/fingerprint-from-image"
+Issues = "https://github.com/m-mutti/fingerprint-from-image/issues"
+
+[tool.hatch.version]
+path = "src/fingerprint_from_image/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fingerprint_from_image"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+pythonpath = ["src", "tests"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+src = ["src", "tests"]
 
 [tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "PYI"]
 # Returning the concrete class keeps the public API compatible with Python 3.10,
 # where typing.Self is not part of the standard library.
 ignore = ["PYI034"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fingerprint_from_image"]
