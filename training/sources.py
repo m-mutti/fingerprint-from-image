@@ -1,4 +1,4 @@
-"""Training/validation sample gathering and per-source sampling weights.
+"""Training/validation sample gathering, source groups/shares and the held-out guard.
 
 Two modes:
 
@@ -9,7 +9,8 @@ Two modes:
   merging, plus ``data.fvc_train_sets`` (FVC DB_B folders).
 
 Validation always uses the manifest ``val`` identities (:mod:`training.validate`).
-FVC2004 (``split == "heldout"``) is never loaded here.
+Every training sample is checked against the held-out set (FVC2004, ``split ==
+"heldout"``) before anything is cached or trained (:mod:`training.guards`).
 """
 
 from __future__ import annotations
@@ -17,19 +18,18 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import numpy as np
-import torch
-
 from training.config import TrainConfig
 from training.data import Sample, fvc_samples, socofing_samples, split_from_file, split_socofing
 from training.dedup import dedup_socofing, duplicate_groups
+from training.guards import check_train_samples, heldout_from_rows
 from training.manifest import group_of, load_rows, rows_to_samples, val_groups
 from training.synth import synthetic_samples
 
-__all__ = ["gather", "sampling_weights"]
+__all__ = ["HELDOUT_MANIFESTS", "gather", "source_group", "train_shares"]
 
 logger = logging.getLogger(__name__)
-_VAL_MANIFESTS = ("FVC2000", "FVC2002", "neurotech", "l3sf", "SOCOFing")
+VAL_MANIFESTS = ("FVC2000", "FVC2002", "neurotech", "l3sf", "SOCOFing")
+HELDOUT_MANIFESTS = ("FVC2004",)
 
 
 def _legacy(cfg: TrainConfig) -> tuple[list[Sample], dict]:
@@ -54,8 +54,33 @@ def _legacy(cfg: TrainConfig) -> tuple[list[Sample], dict]:
     return train, stats
 
 
+def source_group(sample: Sample) -> str:
+    """Sampling group: manifest file name (``FVC2002_DB3`` → ``FVC2002``), or synthetic."""
+
+    if sample.source == "synthetic":
+        return "synthetic"
+    if sample.source.lower() == "socofing":
+        return "SOCOFing"
+    return group_of(sample.source)
+
+
+def train_shares(cfg: TrainConfig) -> dict[str, float]:
+    """Per-group share of every epoch (P×K sampler draws identities by these shares)."""
+
+    if cfg.data.manifest_train:
+        shares = dict(cfg.data.manifest_train)
+    else:  # legacy FVC DB_B folders are named FVC2000 etc. after grouping
+        rest = 1.0 - cfg.data.fvc_weight - cfg.data.synthetic_weight
+        shares = {"SOCOFing": rest}
+        for name in cfg.data.fvc_train_sets:
+            shares[group_of(name.removesuffix("_B"))] = cfg.data.fvc_weight
+    if cfg.data.synthetic_dir:
+        shares["synthetic"] = cfg.data.synthetic_weight
+    return shares
+
+
 def gather(cfg: TrainConfig) -> tuple[list[Sample], dict[str, list[Sample]], dict]:
-    """(train samples, val samples per set, stats)."""
+    """(train samples, val samples per set, stats incl. the held-out guard summary)."""
 
     manifest_dir = Path(cfg.data.manifest_dir)
     if cfg.data.manifest_train:
@@ -66,35 +91,13 @@ def gather(cfg: TrainConfig) -> tuple[list[Sample], dict[str, list[Sample]], dic
         train, stats = _legacy(cfg)
     if cfg.data.synthetic_dir:
         train += synthetic_samples(Path(cfg.data.synthetic_dir))
-    val = val_groups(load_rows(manifest_dir, _VAL_MANIFESTS))
+    heldout = heldout_from_rows(load_rows(manifest_dir, HELDOUT_MANIFESTS))
+    sha_of = {s.path: s.sha256 for s in train if s.sha256}
+    stats["heldout_guard"] = check_train_samples(train, heldout, sha_of)
+    val = val_groups(load_rows(manifest_dir, VAL_MANIFESTS))
     train_ids = {s.label for s in train}
-    leaked = sum(1 for samples in val.values() for s in samples if s.label in train_ids)
-    stats["val_images_in_train_identities"] = leaked
+    stats["val_images_in_train_identities"] = sum(
+        1 for samples in val.values() for s in samples if s.label in train_ids)
+    if stats["val_images_in_train_identities"]:
+        raise ValueError("validation identities appear in the training set")
     return train, val, stats
-
-
-def _group(sample: Sample) -> str:
-    if sample.source == "synthetic":
-        return "synthetic"
-    if sample.source.lower() == "socofing":
-        return "SOCOFing"
-    return group_of(sample.source)
-
-
-def sampling_weights(samples: list[Sample], cfg: TrainConfig) -> torch.Tensor:
-    """Per-image weights giving each source group its configured share of an epoch."""
-
-    groups = np.array([_group(s) for s in samples])
-    if cfg.data.manifest_train:
-        shares = dict(cfg.data.manifest_train)
-    else:  # legacy: FVC DB_B folders share "fvc_weight", SOCOFing the rest
-        groups = np.array(["fvc" if g.startswith("FVC") else g for g in groups])
-        rest = 1.0 - cfg.data.fvc_weight - cfg.data.synthetic_weight
-        shares = {"fvc": cfg.data.fvc_weight, "SOCOFing": rest}
-    shares["synthetic"] = cfg.data.synthetic_weight
-    present = sorted(set(groups.tolist()))
-    total = sum(shares.get(g, 0.0) for g in present)
-    weights = np.zeros(len(samples))
-    for g in present:
-        weights[groups == g] = shares.get(g, 0.0) / total / (groups == g).sum()
-    return torch.from_numpy(weights)

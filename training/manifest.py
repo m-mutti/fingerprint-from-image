@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from training.data import Sample
+from training.guards import check_selection_rows
 
 __all__ = [
     "SELECTION_SETS",
@@ -60,7 +61,8 @@ def rows_to_samples(rows: Iterable[dict], split: str) -> list[Sample]:
     if split == "heldout":
         raise ValueError("held-out rows are for the final test only")
     return [
-        Sample(r["path"], r["identity"], r["dataset"], f"{r['dataset']}:{r['subject']}")
+        Sample(r["path"], r["identity"], r["dataset"], f"{r['dataset']}:{r['subject']}",
+               r.get("sha256"))
         for r in rows if r["split"] == split
     ]
 
@@ -80,6 +82,7 @@ def val_groups(rows: Sequence[dict], sets: Sequence[str] = VAL_SETS,
             chosen = [r for r in chosen
                       if r.get("variant", "") == "" or "Altered-Hard" in r["path"]]
         if chosen:
+            check_selection_rows(chosen)  # selection guard: val rows only
             out[name] = rows_to_samples(chosen, "val")
     return out
 

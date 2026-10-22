@@ -33,7 +33,7 @@ class DataConfig:
     manifest_dir: str = str(ROOT / "data" / "manifests")
     # manifest mode: {manifest group: share of each epoch}, e.g. {"SOCOFing": 0.5, "FVC2000": 0.25}
     manifest_train: dict[str, float] | None = None
-    cache_dir: str = str(ROOT / "runs" / "embedder" / "cache")
+    cache_dir: str = str(ROOT / "runs" / "cache")
     socofing: bool = True
     socofing_altered: bool = True
     socofing_split_file: str | None = str(
@@ -108,13 +108,29 @@ class OptimConfig:
 
     epochs: int = 30
     samples_per_epoch: int = 40000
-    batch_size: int = 128
-    lr: float = 5e-4
+    batch_size: int = 0  # 0 = automatic probe (largest P*K with peak VRAM <= 80 %)
+    k: int = 4  # images per identity in a P*K batch
+    effective_batch: int = 0  # > batch_size -> gradient accumulation; 0 = no accumulation
+    lr: float = 5e-4  # reference LR at lr_ref_batch, rescaled to the effective batch
+    lr_ref_batch: int = 128
+    lr_scaling: str = "sqrt"  # "sqrt" | "linear" | "none"
     head_lr_mult: float = 10.0
     weight_decay: float = 0.05
     warmup_epochs: float = 1.0
     ema: float = 0.999
     grad_clip: float = 5.0
+    divergence_factor: float = 2.0  # abort when the windowed loss exceeds this x its best
+    max_nonfinite: int = 20
+
+    def scaled_lr(self, effective_batch: int) -> float:
+        """Reference LR rescaled from ``lr_ref_batch`` to ``effective_batch``."""
+
+        ratio = effective_batch / self.lr_ref_batch
+        if self.lr_scaling == "linear":
+            return self.lr * ratio
+        if self.lr_scaling == "sqrt":
+            return self.lr * ratio ** 0.5
+        return self.lr
 
 
 @dataclass(frozen=True)

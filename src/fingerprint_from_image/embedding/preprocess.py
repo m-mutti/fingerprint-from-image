@@ -24,6 +24,7 @@ __all__ = [
     "BLOCK",
     "CLIP",
     "INPUT_SIZE",
+    "PREPROCESS_VERSION",
     "TARGET_PERIOD",
     "Prepared",
     "block_mask",
@@ -39,6 +40,7 @@ __all__ = [
     "trim_uniform_border",
 ]
 
+PREPROCESS_VERSION = "pp-v3"  # bump on any change that alters model inputs
 TARGET_PERIOD = 6.0  # pixels per ridge period after rescaling
 INPUT_SIZE = 256  # network input side
 BLOCK = 16  # foreground block size (≈ 2.7 ridge periods)

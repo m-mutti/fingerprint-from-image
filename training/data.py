@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -22,10 +23,13 @@ from PIL import Image
 
 from fingerprint_from_image.embedding import preprocess as pp
 from fingerprint_from_image.io import load_image
+from training.keys import StepDir, canonical_json
 
 __all__ = [
     "Sample",
     "build_cache",
+    "cache_inputs",
+    "image_fingerprint",
     "calibration_inputs",
     "fvc_samples",
     "load_gray",
@@ -47,6 +51,7 @@ class Sample:
     label: str  # finger identity key
     source: str  # "socofing" | FVC set name | "synthetic"
     subject: str
+    sha256: str | None = None  # image content hash from the manifest, when known
 
 
 def load_gray(path: str, source: str) -> np.ndarray:
@@ -162,25 +167,48 @@ def _real_counterpart(path: str) -> str:
     return Path(path).stem.rsplit("_", 1)[0]
 
 
-def build_cache(
-    samples: Sequence[Sample], cache_dir: Path, *, canvas: int, naive: bool, workers: int = 12
-) -> dict[str, np.ndarray]:
-    """Return (and memoise) ``canvases``, ``background``, ``period``, ``extent``, ``valid_box``.
+def image_fingerprint(sample: Sample) -> str:
+    """Manifest SHA-256 when known, else ``path|size|mtime_ns`` (generated/legacy files)."""
 
-    SOCOFing Altered images are pixel-aligned edits of their Real image, so they
-    reuse the Real image's ridge period (obliteration blobs otherwise corrupt the
-    spectral estimate); every other image uses the runtime estimator.
+    if sample.sha256:
+        return sample.sha256
+    stat = Path(sample.path).stat()
+    return f"{Path(sample.path).as_posix()}|{stat.st_size}|{stat.st_mtime_ns}"
+
+
+def cache_inputs(samples: Sequence[Sample], *, canvas: int, naive: bool) -> dict:
+    """Content-key inputs of the canvas cache (image list digest + preprocessing params)."""
+
+    images = [[image_fingerprint(s), s.source] for s in samples]
+    return {
+        "images_sha256": hashlib.sha256(canonical_json(images).encode()).hexdigest(),
+        "n_images": len(samples), "canvas": canvas, "naive": naive,
+        "preprocess": pp.PREPROCESS_VERSION, "target_period": pp.TARGET_PERIOD,
+        "socofing_period_inheritance": True,
+    }
+
+
+def build_cache(
+    samples: Sequence[Sample], root: Path | None = None, *, canvas: int, naive: bool,
+    workers: int = 12,
+) -> tuple[dict[str, np.ndarray], str]:
+    """Content-keyed canvas cache → (arrays, cache key); skipped when already built.
+
+    Arrays: ``canvases``, ``background``, ``period``, ``extent``, ``valid_box``.
+    SOCOFing Altered images are pixel-aligned edits of their Real image, so they reuse
+    the Real image's ridge period (obliteration blobs otherwise corrupt the spectral
+    estimate); every other image uses the runtime estimator.
     """
 
-    key = hashlib.sha1(json.dumps(
-        [[s.path for s in samples], canvas, naive, pp.TARGET_PERIOD, "v3-prior16"]
-    ).encode()).hexdigest()[:16]
-    path = cache_dir / f"canvas_{key}.npz"
-    if path.is_file():
-        with np.load(path) as stored:
-            return {name: stored[name] for name in stored.files}
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("Building canvas cache for %d images -> %s", len(samples), path)
+    inputs = cache_inputs(samples, canvas=canvas, naive=naive)
+    step = StepDir.for_inputs("cache", inputs, root)
+    target = step.path / "canvases.npz"
+    if step.is_done(verify=False) and target.is_file():
+        with np.load(target) as stored:
+            return {name: stored[name] for name in stored.files}, step.key
+    started = time.time()
+    step.path.mkdir(parents=True, exist_ok=True)
+    logger.info("Building canvas cache for %d images -> %s", len(samples), step.path)
     real = {Path(s.path).stem: s for s in samples
             if s.source.lower() == "socofing" and "/Real/" in s.path.replace("\\", "/")}
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -204,8 +232,10 @@ def build_cache(
     }
     small = int((arrays["extent"] < 100).sum())
     logger.info("cache: %d / %d images have rescaled extent < 100 px", small, len(samples))
-    np.savez(path, **arrays)
-    return arrays
+    np.savez(target, **arrays)
+    # verify=False on reuse: hashing a multi-GB cache on every start is not worth it
+    step.mark_done(inputs, [], {"small_extent": small, "file": target.name}, started)
+    return arrays, step.key
 
 
 def calibration_inputs(n: int = 256, seed: int = 0) -> np.ndarray:
