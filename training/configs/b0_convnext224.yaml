@@ -1,0 +1,12 @@
+# B0: backbone ablation reference - ConvNeXt-V2-T (CC-BY-NC-4.0 weights) at 224 px, the input
+# size the DINOv2 runs need (multiple of 14 and 16). A1 data mix, 8 epochs.
+name: b0_convnext224
+input_size: 224
+data:
+  manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
+  socofing_drop_variants: [CR]
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.15
+optim:
+  epochs: 8
+  k: 1

@@ -1,0 +1,24 @@
+# v1_long: the single long run. TEMPLATE = A1 + A3 + A4 combined; finalise from the ablation
+# table (pooled val FNMR@FMR0.1 % first, mean val EER second, effects beyond the A2 noise
+# floor only) before submitting. Early stop: no pooled-val improvement in 3 evaluations
+# after epoch 40.
+name: v1_long
+data:
+  manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
+  socofing_drop_variants: [CR]
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.15
+aug:
+  elastic: 0.06
+  translate: 0.15
+  partial: 0.4
+  polarity: 0.0
+  lowres: 0.35
+loss:
+  aux: supcon
+  aux_weight: 0.5
+optim:
+  epochs: 80
+  k: 4
+  early_stop_after: 40
+  early_stop_patience: 3

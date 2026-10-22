@@ -1,0 +1,13 @@
+# A3: A1 + P×K identity-balanced batches (K=4) + SupCon auxiliary loss (weight 0.5).
+name: a3_pk_supcon
+data:
+  manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
+  socofing_drop_variants: [CR]
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.15
+loss:
+  aux: supcon
+  aux_weight: 0.5
+optim:
+  epochs: 8
+  k: 4

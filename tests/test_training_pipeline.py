@@ -207,3 +207,40 @@ def test_source_digest_tracks_python_content_only(tmp_path: Path) -> None:
     assert source_digest(files, tmp_path) == first
     (tmp_path / "a.py").write_text("x = 2\n")
     assert source_digest(files, tmp_path) != first
+
+
+def test_sweep_expand_and_promote() -> None:
+    from training.sweep import expand, promote
+
+    grid = expand({"optim.lr": [1, 2], "loss.margin": [0.3, 0.4, 0.5]})
+    assert len(grid) == 6 and grid[0] == {"loss.margin": 0.3, "optim.lr": 1}
+    results = {0: (5.0, 3.0), 1: (2.0, 9.0), 2: None, 3: (2.0, 1.0)}
+    assert promote(results, 0.5) == [1, 3]  # ranks on (pooled FNMR, mean EER); failed last
+    assert promote({0: None, 1: (1.0, 1.0)}, 1.0) == [1]
+
+
+def test_sweep_step_submits_ranks_and_promotes(tmp_path: Path,
+                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    import yaml
+    from training.sweep import step
+
+    monkeypatch.setenv("FFI_RUNS", str(tmp_path / "runs"))
+    spec = tmp_path / "s.yaml"
+    spec.write_text(yaml.safe_dump({
+        "name": "t", "base": str(TRAINING / "training" / "configs" / "a0_reference.yaml"),
+        "space": {"optim.lr": [1e-4, 2e-4, 3e-4, 4e-4]},
+        "rungs": [{"epochs": 2, "keep": 0.5}, {"epochs": 4, "keep": 1}]}))
+    registry = Registry(tmp_path / "registry.sqlite")
+    queue = Queue(tmp_path / "queue")
+    state = step(spec, registry=registry, queue=queue)
+    assert state["rung"] == 0 and len(queue.jobs("pending")) == 4
+    assert step(spec, registry=registry, queue=queue)["rung"] == 0  # idempotent: no resubmit
+    assert len(queue.jobs("pending")) == 4
+    for trial, value in enumerate([4.0, 1.0, 3.0, 2.0]):
+        registry.upsert("train", f"k{trial}", "done", name=f"t-t{trial:03d}-r0",
+                        metrics={"val_select": value, "val_select_eer": 0.0})
+    state = step(spec, registry=registry, queue=queue)
+    assert state["rung"] == 1 and state["alive"] == [1, 3]
+    step(spec, registry=registry, queue=queue)
+    names = [p.name for p in queue.jobs("pending")]
+    assert any("t-t001-r1" in n for n in names) and any("t-t003-r1" in n for n in names)

@@ -84,6 +84,10 @@ def _gaussian_kernels(sigma: torch.Tensor, k: int = 7) -> torch.Tensor:
     return g[:, :, None] * g[:, None, :]
 
 
+_PROBABILITIES = ("partial", "cutout", "lowres", "blur", "sharpen", "morph", "noise",
+                  "illumination", "polarity", "gamma", "frame")
+
+
 class Augmenter:
     """Callable producing normalised ``(N, 1, S, S)`` training inputs from uint8 canvases."""
 
@@ -93,6 +97,12 @@ class Augmenter:
                 cfg, rotation=15.0, scale=0.08, translate=0.05, elastic=0.0, partial=0.0,
                 cutout=0.0, lowres=0.1, blur=0.1, sharpen=0.0, morph=0.0, noise=0.2,
                 illumination=0.0, polarity=0.0, gamma=0.2, frame=0.0,
+            )
+        elif cfg.strength == "medium":  # heavy ranges x0.7, probabilities x0.6
+            cfg = dataclasses.replace(
+                cfg, rotation=cfg.rotation * 0.7, scale=cfg.scale * 0.7,
+                translate=cfg.translate * 0.7, elastic=cfg.elastic * 0.7,
+                **{name: getattr(cfg, name) * 0.6 for name in _PROBABILITIES},
             )
         self.cfg = cfg
         self.size = size

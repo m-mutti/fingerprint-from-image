@@ -1,0 +1,21 @@
+# Hyper-parameter sweep on the winning ablation recipe (successive halving, val-only ranking).
+# `base` must be updated to the winning ablation config before running.
+# 24 of the 144 grid points (seeded), rungs 4 -> 8 -> 12 epochs keeping the top half each time
+# (24 x 4 + 12 x 8 + 6 x 12 = 264 epoch-equivalents of 40k samples ~ 12 GPU-hours at 250 img/s;
+# trim `sample` to fit the budget).
+name: hp_v1
+base: training/configs/a3_pk_supcon.yaml
+sample: 24
+seed: 0
+priority: 1
+space:
+  optim.lr: [3.0e-4, 5.0e-4, 8.0e-4]
+  loss.margin: [0.3, 0.4, 0.5]
+  loss.scale: [32.0, 48.0]
+  optim.weight_decay: [0.05, 0.1]
+  aug.strength: [medium, heavy]
+  model.dim: [256, 512]
+rungs:
+  - {epochs: 4, keep: 0.5}
+  - {epochs: 8, keep: 0.5}
+  - {epochs: 12, keep: 1}

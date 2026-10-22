@@ -1,0 +1,17 @@
+# A4: A1 + distortion-focused augmentation retune. No sensor-specific (thermal sweep)
+# augmentation: FVC2004 DB3 is the held-out sweep sensor, so that would be test tuning.
+name: a4_distortion_aug
+data:
+  manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
+  socofing_drop_variants: [CR]
+  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_weight: 0.15
+aug:
+  elastic: 0.06
+  translate: 0.15
+  partial: 0.4
+  polarity: 0.0
+  lowres: 0.35
+optim:
+  epochs: 8
+  k: 1

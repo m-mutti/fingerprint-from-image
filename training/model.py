@@ -46,12 +46,14 @@ class EmbeddingNet(nn.Module):
 
     def __init__(self, cfg: ModelConfig, input_size: int) -> None:
         super().__init__()
+        extra = {"img_size": input_size} if cfg.backbone.startswith("vit") else {}
         self.backbone = timm.create_model(
             cfg.backbone, pretrained=cfg.pretrained, in_chans=1, num_classes=0,
-            global_pool="", drop_path_rate=cfg.drop_path,
+            global_pool="", drop_path_rate=cfg.drop_path, **extra,
         )
+        self.prefix_tokens = int(getattr(self.backbone, "num_prefix_tokens", 0))
         with torch.no_grad():
-            probe = self.backbone.forward_features(torch.zeros(1, 1, input_size, input_size))
+            probe = self._features(torch.zeros(1, 1, input_size, input_size))
         channels, spatial = probe.shape[1], probe.shape[2]
         if cfg.head == "flatten":
             self.head: nn.Module = _FlattenHead(channels, spatial, cfg.dim, cfg.dropout)
@@ -60,8 +62,18 @@ class EmbeddingNet(nn.Module):
         else:
             raise ValueError(f"Unknown head {cfg.head!r}")
 
+    def _features(self, x: torch.Tensor) -> torch.Tensor:
+        """(N, C, h, w) feature map; ViT patch tokens are reshaped back onto their grid."""
+
+        features = self.backbone.forward_features(x)
+        if features.ndim == 3:  # (N, prefix + h*w, C) from a ViT (cls/register tokens first)
+            tokens = features[:, self.prefix_tokens :]
+            side = int(round(tokens.shape[1] ** 0.5))
+            features = tokens.transpose(1, 2).reshape(tokens.shape[0], -1, side, side)
+        return features
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.head(self.backbone.forward_features(x))
+        return self.head(self._features(x))
 
 
 class NormalizedEmbedder(nn.Module):

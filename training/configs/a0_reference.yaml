@@ -1,0 +1,9 @@
+# A0 (ML review 2026-10-22): m1_fvcfull as-is - reference for the manifest pipeline.
+# K=1: identity-balanced batches without in-batch positives (closest to the old sampler).
+name: a0_reference
+data:
+  manifest_train: {SOCOFing: 0.5, FVC2000: 0.25, FVC2002: 0.25}
+  socofing_drop_variants: []
+optim:
+  epochs: 8
+  k: 1

@@ -180,17 +180,18 @@ def _render(field: torch.Tensor, gen: torch.Generator) -> torch.Tensor:
     return image.clamp(0, 255).round().to(torch.uint8)
 
 
-def generate(out: Path, identities: int, impressions: int, seed: int, batch: int = 32) -> None:
+def generate(out: Path, identities: int, impressions: int, seed: int, batch: int = 32,
+             device: str | None = None, start_id: int = 0) -> None:
     """Write ``identities × impressions`` PNGs named ``{identity:06d}_{impression}.png``."""
 
     out.mkdir(parents=True, exist_ok=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    gen = torch.Generator(device=device).manual_seed(seed)
-    for start in range(0, identities, batch):
-        n = min(batch, identities - start)
+    device_t = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    gen = torch.Generator(device=device_t).manual_seed(seed)
+    for start in range(start_id, start_id + identities, batch):
+        n = min(batch, start_id + identities - start)
         with torch.no_grad():
-            theta = _orientation(n, gen, device)
-            period = torch.rand(n, generator=gen, device=device) * 3.5 + 7.5
+            theta = _orientation(n, gen, device_t)
+            period = torch.rand(n, generator=gen, device=device_t) * 3.5 + 7.5
             field = _grow(theta, period, gen)
             for imp in range(impressions):
                 images = _render(field, gen).cpu().numpy()
@@ -205,8 +206,12 @@ def main() -> int:
     parser.add_argument("--impressions", type=int, default=2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--batch", type=int, default=32)
+    parser.add_argument("--device", default=None, help="cuda | cpu (default: cuda if present)")
+    parser.add_argument("--threads", type=int, default=0, help="CPU threads (0 = torch default)")
     args = parser.parse_args()
-    generate(args.out, args.identities, args.impressions, args.seed, args.batch)
+    if args.threads:
+        torch.set_num_threads(args.threads)
+    generate(args.out, args.identities, args.impressions, args.seed, args.batch, args.device)
     return 0
 
 

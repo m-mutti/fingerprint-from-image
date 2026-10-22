@@ -169,13 +169,35 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--force", action="store_true", help="retrain even if already done")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="gather data + guards + lineage only (CPU, no cache/GPU)")
     args = parser.parse_args(argv)
     overrides = {}
     for item in args.set:
         key, value = item.split("=", 1)
         overrides[key] = yaml.safe_load(value)
-    train(load_config(args.config, overrides), force=args.force)
+    cfg = load_config(args.config, overrides)
+    if args.dry_run:
+        print(json.dumps(dry_run(cfg), indent=2))  # noqa: T201 - CLI output
+        return 0
+    train(cfg, force=args.force)
     return 0
+
+
+def dry_run(cfg: TrainConfig) -> dict:
+    """Data/guard/lineage summary of a config without touching the GPU or the cache."""
+
+    from collections import Counter
+
+    samples, val_sets, stats = gather(cfg)
+    groups = Counter(source_group(s) for s in samples)
+    identities = Counter(source_group(s) for s in {s.label: s for s in samples}.values())
+    return {"name": cfg.name, "images": len(samples), "classes": len({s.label for s in samples}),
+            "images_per_group": dict(groups), "identities_per_group": dict(identities),
+            "shares": train_shares(cfg), "licence": lineage(train_shares(cfg),
+                                                             cfg.model.backbone),
+            "val_sets": {k: len(v) for k, v in val_sets.items()}, "guards": stats,
+            "lr_at_requested_batch": cfg.optim.scaled_lr(cfg.optim.batch_size)}
 
 
 if __name__ == "__main__":
