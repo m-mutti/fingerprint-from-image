@@ -1,0 +1,24 @@
+# Training / export environment for the fingerprint embedder (Windows 11, RTX 5060 Ti sm_120).
+# Install torch first from the CUDA 12.8 index:
+#   uv venv .venv-train --python 3.11
+#   uv pip install --python .venv-train/Scripts/python.exe torch==2.11.0 torchvision==0.26.0 \
+#       --index-url https://download.pytorch.org/whl/cu128
+#   uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-train.txt -e .
+timm==1.0.30
+triton-windows==3.7.1.post27   # torch.compile (Inductor) on native Windows
+numpy
+pillow
+pyyaml==6.0.3
+matplotlib
+nvidia-ml-py==13.615.71        # GPU utilisation logging
+onnx
+onnxruntime==1.31.0
+onnxscript==0.7.2              # torch.onnx dynamo exporter
+onnxsim==0.8.1
+onnxconverter-common==1.16.0   # FP16 ONNX
+pytest
+ruff
+# LiteRT (TFLite) conversion runs under WSL2 Ubuntu (ai-edge-litert has no Windows wheels):
+#   uv venv ~/.venvs/litert --python 3.11
+#   uv pip install --python ~/.venvs/litert/bin/python litert-torch torch torchvision timm pillow \
+#       --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
