@@ -26,6 +26,7 @@ __all__ = [
     "canonical_json",
     "code_version",
     "content_key",
+    "source_digest",
     "file_sha256",
     "runs_root",
 ]
@@ -71,24 +72,39 @@ def file_sha256(path: str | Path, chunk: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
-def code_version(
-    repo: str | Path | None = None, paths: Iterable[str] = ("training", "src")
-) -> dict:
-    """Git commit plus a hash of the uncommitted diff of ``paths`` (``dirty`` = diff non-empty)."""
+def source_digest(files: Iterable[Path], root: Path) -> str:
+    """SHA-256 over (relative POSIX path, content hash) of ``files`` (sorted)."""
 
-    cwd = Path(repo) if repo else Path(__file__).resolve().parents[1]
+    entries = sorted((f.relative_to(root).as_posix(), file_sha256(f)) for f in files)
+    return hashlib.sha256(canonical_json(entries).encode("utf-8")).hexdigest()
+
+
+def code_version(repo: str | Path | None = None,
+                 patterns: Iterable[str] = ("training/*.py", "src/**/*.py")) -> dict:
+    """Content hash of the Python sources that affect training (tracked *and* untracked).
+
+    Files come from ``git ls-files -co --exclude-standard`` restricted to ``patterns``;
+    docs/YAML edits do not change the key, uncommitted ``.py`` edits do. The commit id
+    is recorded for provenance but is not part of the hash.
+    """
+
+    root = Path(repo) if repo else Path(__file__).resolve().parents[1]
 
     def git(*args: str) -> str:
         try:
-            return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+            return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
                                   check=False).stdout
         except OSError:
             return ""
 
-    diff = git("diff", "HEAD", "--", *paths)
-    return {"commit": git("rev-parse", "HEAD").strip() or "unknown",
-            "dirty": bool(diff.strip()),
-            "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest()}
+    listed = git("ls-files", "-co", "--exclude-standard", "--", *patterns).splitlines()
+    files = [root / name for name in listed if name.endswith(".py") and (root / name).is_file()]
+    if not files:  # not a git checkout: fall back to globbing
+        files = [f for pattern in patterns for f in root.glob(pattern) if f.is_file()]
+    status = git("status", "--porcelain", "--", *patterns)
+    return {"py_sha256": source_digest(files, root), "files": len(files),
+            "commit": git("rev-parse", "HEAD").strip() or "unknown",
+            "dirty": bool(status.strip())}
 
 
 @dataclass(frozen=True)

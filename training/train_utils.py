@@ -110,7 +110,9 @@ def save_checkpoint(path: Path, model: torch.nn.Module, cfg: TrainConfig,
                     extra: dict[str, Any]) -> None:
     """Save embedding weights (no classifier) with the config needed to rebuild them."""
 
-    torch.save({"config": cfg.to_dict(), "model": model.state_dict(), **extra}, path)
+    tmp = Path(str(path) + ".tmp")
+    torch.save({"config": cfg.to_dict(), "model": model.state_dict(), **extra}, tmp)
+    tmp.replace(path)  # atomic: a crash never leaves a truncated checkpoint
 
 
 def load_model(path: Path, device: str = "cpu") -> tuple[NormalizedEmbedder, TrainConfig]:

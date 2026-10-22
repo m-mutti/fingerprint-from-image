@@ -107,7 +107,7 @@ class Augmenter:
         dev = canvas.device
         angle = _uniform(n, -cfg.rotation, cfg.rotation, dev) * math.pi / 180.0
         zoom = torch.exp(_uniform(n, -cfg.scale, cfg.scale, dev))
-        aniso = torch.exp(_uniform(n, -0.05, 0.05, dev))
+        aniso = torch.exp(_uniform(n, -cfg.anisotropy, cfg.anisotropy, dev))
         ratio = s / c
         cos, sin = torch.cos(angle), torch.sin(angle)
         theta = torch.zeros(n, 2, 3, device=dev)

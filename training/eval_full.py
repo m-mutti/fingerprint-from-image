@@ -33,9 +33,9 @@ __all__ = ["evaluate_full", "main"]
 SUBSETS = {"full": (1, 110), "A": (1, 100), "B": (101, 110)}
 
 
-def _prep(args: tuple[str, bool]) -> np.ndarray:
-    path, naive = args
-    return model_input(load_gray(path, "fvc"), naive=naive)
+def _prep(args: tuple[str, bool, int]) -> np.ndarray:
+    path, naive, size = args
+    return model_input(load_gray(path, "fvc"), naive=naive, size=size)
 
 
 def _metrics(emb: np.ndarray, n_fingers: int) -> dict[str, float]:
@@ -51,7 +51,8 @@ def _metrics(emb: np.ndarray, n_fingers: int) -> dict[str, float]:
     return out
 
 
-def evaluate_full(embed: EmbedFn, *, naive: bool = False, workers: int = 8) -> dict:
+def evaluate_full(embed: EmbedFn, *, naive: bool = False, size: int = 256,
+                  workers: int = 8) -> dict:
     """Metrics per DB × subset plus means over the four DBs."""
 
     rows = [r for r in load_rows(ROOT / "data" / "manifests", ["FVC2004"])
@@ -63,7 +64,7 @@ def evaluate_full(embed: EmbedFn, *, naive: bool = False, workers: int = 8) -> d
                             key=lambda r: (int(r["subject"]), int(r["impression"])))
             if len(chosen) != 880:
                 raise ValueError(f"FVC2004_DB{db}: expected 880 images, got {len(chosen)}")
-            inputs = np.stack(list(pool.map(_prep, [(r["path"], naive) for r in chosen],
+            inputs = np.stack(list(pool.map(_prep, [(r["path"], naive, size) for r in chosen],
                                             chunksize=16)))[:, None].astype(np.float32)
             emb = embed(inputs)
             results[f"FVC2004_DB{db}"] = {
@@ -97,14 +98,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--json", type=Path)
     args = parser.parse_args(argv)
-    naive = False
+    naive, size = False, 256
     if args.checkpoint:
-        embed, naive = _torch_embed(args.checkpoint, args.device)
+        embed, naive, size = _torch_embed(args.checkpoint, args.device)
     elif args.onnx:
         embed = _onnx_embed(args.onnx, args.threads)
     else:
         embed = _tflite_embed(args.tflite, args.threads)
-    results = evaluate_full(embed, naive=naive)
+    results = evaluate_full(embed, naive=naive, size=size)
     print(_format(results))  # noqa: T201 - CLI output
     if args.json:
         args.json.write_text(json.dumps(results, indent=2), encoding="utf-8")

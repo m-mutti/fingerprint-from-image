@@ -116,6 +116,7 @@ class Queue:
         log = self.root / "logs" / f"{running.stem}.log"
         heartbeat = self.root / "heartbeat" / f"{running.stem}.hb"
         env = {**os.environ, "FFI_HEARTBEAT": str(heartbeat), "PYTHONIOENCODING": "utf-8"}
+        heartbeat.unlink(missing_ok=True)  # a resumed job must not inherit a stale heartbeat
         start = time.time()
         with log.open("ab") as out:
             proc = subprocess.Popen([sys.executable, *spec["argv"]], stdout=out,
@@ -124,7 +125,7 @@ class Queue:
             reason = None
             while proc.poll() is None:
                 time.sleep(poll)
-                last = heartbeat.stat().st_mtime if heartbeat.is_file() else start
+                last = max(start, heartbeat.stat().st_mtime if heartbeat.is_file() else start)
                 if time.time() - last > stall_seconds:
                     reason = "stall"
                     _kill_tree(proc)

@@ -69,7 +69,7 @@ def test_crop_around_pads_with_fill() -> None:
     assert out[0, 0] == -1.0 and out[2, 2] == image[0, 0]
 
 
-def _tiny_model(path: Path, dim: int = 8) -> None:
+def _tiny_model(path: Path, dim: int = 8, preprocess_version: str = pp.PREPROCESS_VERSION) -> None:
     onnx = pytest.importorskip("onnx")
     from onnx import TensorProto, helper, numpy_helper
 
@@ -91,7 +91,8 @@ def _tiny_model(path: Path, dim: int = 8) -> None:
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
     model.ir_version = 8
     for key, value in {"model_version": "tiny-test", "dim": str(dim),
-                       "input_size": str(size), "target_period": str(pp.TARGET_PERIOD)}.items():
+                       "input_size": str(size), "target_period": str(pp.TARGET_PERIOD),
+                       "preprocess_version": preprocess_version}.items():
         entry = model.metadata_props.add()
         entry.key, entry.value = key, value
     onnx.save(model, str(path))
@@ -124,3 +125,7 @@ def test_embedder_rejects_missing_or_mismatched_models(tmp_path: Path) -> None:
         FingerprintEmbedder(tmp_path / "missing.onnx")
     with pytest.raises(ModelUnavailableError):
         FingerprintEmbedder(model_name="not-registered.onnx")
+    stale = tmp_path / "stale.onnx"
+    _tiny_model(stale, preprocess_version="pp-v0")
+    with pytest.raises(ModelUnavailableError, match="preprocessing"):
+        FingerprintEmbedder(stale)

@@ -66,6 +66,8 @@ def verification_metrics(genuine: np.ndarray, impostor: np.ndarray) -> Verificat
 
     genuine = np.asarray(genuine, dtype=np.float64)
     impostor = np.asarray(impostor, dtype=np.float64)
+    if not (np.isfinite(genuine).all() and np.isfinite(impostor).all()):
+        raise ValueError("non-finite scores (NaN/inf embeddings) — refusing to compute metrics")
     thresholds = np.unique(np.concatenate([genuine, impostor, [-np.inf, np.inf]]))
     g_sorted, i_sorted = np.sort(genuine), np.sort(impostor)
     fnmr = np.searchsorted(g_sorted, thresholds, side="left") / len(genuine)

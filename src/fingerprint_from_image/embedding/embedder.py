@@ -10,7 +10,7 @@ import numpy as np
 
 from ..io import to_gray
 from ..models import ModelUnavailableError, model_path
-from .preprocess import INPUT_SIZE, TARGET_PERIOD, preprocess
+from .preprocess import INPUT_SIZE, PREPROCESS_VERSION, TARGET_PERIOD, preprocess
 from .registry import DEFAULT_MODEL
 
 __all__ = ["FingerprintEmbedder"]
@@ -65,6 +65,12 @@ class FingerprintEmbedder:
         self.model_path = path
         self.model_version: str = meta.get("model_version", path.stem)
         self.input_size = int(meta.get("input_size", INPUT_SIZE))
+        if meta.get("preprocess_version") != PREPROCESS_VERSION:
+            raise ModelUnavailableError(
+                f"{path.name} was trained with preprocessing "
+                f"{meta.get('preprocess_version', 'unknown')!r}; this runtime implements "
+                f"{PREPROCESS_VERSION!r}"
+            )
         if float(meta.get("target_period", TARGET_PERIOD)) != TARGET_PERIOD:
             raise ModelUnavailableError(
                 f"{path.name} expects ridge period {meta['target_period']}, "

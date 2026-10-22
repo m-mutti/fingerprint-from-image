@@ -37,7 +37,8 @@ FVC_GROUPS = {
 }
 
 
-def load_fvc_inputs(name: str, *, root: Path = DATA, naive: bool = False) -> np.ndarray:
+def load_fvc_inputs(name: str, *, root: Path = DATA, naive: bool = False,
+                    size: int = 256) -> np.ndarray:
     """Preprocessed ``(80, 1, S, S)`` inputs ordered finger-major (101_1 … 110_8)."""
 
     arrays = []
@@ -45,7 +46,7 @@ def load_fvc_inputs(name: str, *, root: Path = DATA, naive: bool = False) -> np.
         for impression in range(1, 9):
             with Image.open(root / name / f"{finger}_{impression}.tif") as handle:
                 gray = np.asarray(handle.convert("L"), dtype=np.uint8)
-            arrays.append(model_input(gray, naive=naive))
+            arrays.append(model_input(gray, naive=naive, size=size))
     return np.stack(arrays)[:, None].astype(np.float32)
 
 
@@ -80,14 +81,14 @@ def evaluate_embeddings(
 def evaluate_sets(
     embed: EmbedFn, sets: Sequence[str], *, naive: bool = False,
     cache: dict[str, np.ndarray] | None = None,
-    scores: dict[str, dict[str, np.ndarray]] | None = None,
+    scores: dict[str, dict[str, np.ndarray]] | None = None, size: int = 256,
 ) -> dict[str, dict[str, float]]:
     """Evaluate ``embed`` on each FVC set; adds a ``mean`` row (raw scores into ``scores``)."""
 
     results: dict[str, dict[str, float]] = {}
     for name in sets:
         inputs = cache[name] if cache is not None and name in cache else load_fvc_inputs(
-            name, naive=naive)
+            name, naive=naive, size=size)
         if cache is not None:
             cache[name] = inputs
         collect: dict[str, np.ndarray] | None = {} if scores is not None else None
@@ -99,7 +100,7 @@ def evaluate_sets(
     return results
 
 
-def _torch_embed(checkpoint: Path, device: str) -> tuple[EmbedFn, bool]:
+def _torch_embed(checkpoint: Path, device: str) -> tuple[EmbedFn, bool, int]:
     import torch
 
     from training.train_utils import load_model
@@ -112,7 +113,7 @@ def _torch_embed(checkpoint: Path, device: str) -> tuple[EmbedFn, bool]:
                 for i in range(0, len(x), 32)]
         return np.concatenate(outs)
 
-    return embed, bool(cfg.data.naive_resize)
+    return embed, bool(cfg.data.naive_resize), int(cfg.input_size)
 
 
 def _onnx_embed(path: Path, threads: int) -> EmbedFn:
@@ -222,16 +223,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     sets = [s for group_name in args.sets for s in FVC_GROUPS.get(group_name, [group_name])]
-    naive = False
+    naive, size = False, 256
     if args.checkpoint:
-        embed, naive = _torch_embed(args.checkpoint, args.device)
+        embed, naive, size = _torch_embed(args.checkpoint, args.device)
     elif args.onnx:
         embed = _onnx_embed(args.onnx, args.threads)
     else:
         embed = _tflite_embed(args.tflite, args.threads)
     if args.tta:
         embed = with_tta(embed, args.tta)
-    results: dict[str, object] = dict(evaluate_sets(embed, sets, naive=naive))
+    results: dict[str, object] = dict(evaluate_sets(embed, sets, naive=naive, size=size))
     print(_format(results))  # noqa: T201 - CLI output
     if args.latency:
         size = load_fvc_inputs(sets[0])[0].shape[-1]

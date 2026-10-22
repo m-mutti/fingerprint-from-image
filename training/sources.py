@@ -22,7 +22,7 @@ from training.config import TrainConfig
 from training.data import Sample, fvc_samples, socofing_samples, split_from_file, split_socofing
 from training.dedup import dedup_socofing, duplicate_groups
 from training.guards import check_train_samples, heldout_from_rows
-from training.manifest import group_of, load_rows, rows_to_samples, val_groups
+from training.manifest import drop_variants, group_of, load_rows, rows_to_samples, val_groups
 from training.synth import synthetic_samples
 
 __all__ = ["HELDOUT_MANIFESTS", "gather", "source_group", "train_shares"]
@@ -84,7 +84,9 @@ def gather(cfg: TrainConfig) -> tuple[list[Sample], dict[str, list[Sample]], dic
 
     manifest_dir = Path(cfg.data.manifest_dir)
     if cfg.data.manifest_train:
-        rows = load_rows(manifest_dir, cfg.data.manifest_train)
+        rows = load_rows(manifest_dir, [g for g, share in cfg.data.manifest_train.items()
+                                        if share > 0])
+        rows = drop_variants(rows, cfg.data.socofing_drop_variants)
         train = rows_to_samples(rows, "train")
         stats: dict = {"manifest_groups": dict(cfg.data.manifest_train)}
     else:

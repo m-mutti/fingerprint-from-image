@@ -1,4 +1,4 @@
-"""Margin-based identity losses: ArcFace (± sub-centres), CosFace and AdaFace."""
+"""Identity losses: ArcFace (± sub-centres), CosFace, AdaFace; SupCon / MS pair losses."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from torch import nn
 
 from training.config import LossConfig
 
-__all__ = ["MarginLoss"]
+__all__ = ["MarginLoss", "aux_pair_loss", "multi_similarity_loss", "supcon_loss"]
 
 
 class MarginLoss(nn.Module):
@@ -69,3 +69,57 @@ class MarginLoss(nn.Module):
         theta_m = (theta - m * scaler).clamp(1e-3, math.pi - 1e-3)
         target = torch.cos(theta_m) - (m + m * scaler)
         return torch.where(onehot, target, cos)
+
+
+def supcon_loss(embeddings: torch.Tensor, labels: torch.Tensor,
+                temperature: float = 0.1) -> torch.Tensor:
+    """Supervised contrastive loss (Khosla et al., arXiv 2004.11362) over one batch.
+
+    Anchors without an in-batch positive are ignored (P×K batches always have K-1).
+    """
+
+    z = F.normalize(embeddings.float(), dim=1)
+    logits = z @ z.T / temperature
+    n = z.shape[0]
+    eye = torch.eye(n, dtype=torch.bool, device=z.device)
+    positives = (labels[:, None] == labels[None, :]) & ~eye
+    logits = logits.masked_fill(eye, float("-inf"))
+    log_prob = logits - torch.logsumexp(logits, dim=1, keepdim=True)
+    count = positives.sum(dim=1)
+    valid = count > 0
+    if not valid.any():
+        return z.sum() * 0.0
+    mean_pos = (log_prob.masked_fill(~positives, 0.0).sum(dim=1)[valid] / count[valid])
+    return -mean_pos.mean()
+
+
+def multi_similarity_loss(embeddings: torch.Tensor, labels: torch.Tensor, alpha: float = 2.0,
+                          beta: float = 50.0, base: float = 0.5,
+                          margin: float = 0.1) -> torch.Tensor:
+    """Multi-Similarity loss with its pair mining (Wang et al., arXiv 1904.06627)."""
+
+    z = F.normalize(embeddings.float(), dim=1)
+    sim = z @ z.T
+    n = z.shape[0]
+    eye = torch.eye(n, dtype=torch.bool, device=z.device)
+    pos_mask = (labels[:, None] == labels[None, :]) & ~eye
+    neg_mask = labels[:, None] != labels[None, :]
+    inf = torch.tensor(float("inf"), device=z.device)
+    hardest_pos = torch.where(pos_mask, sim, inf).amin(dim=1, keepdim=True)
+    hardest_neg = torch.where(neg_mask, sim, -inf).amax(dim=1, keepdim=True)
+    keep_neg = neg_mask & (sim + margin > hardest_pos)
+    keep_pos = pos_mask & (sim - margin < hardest_neg)
+    pos_term = torch.log1p((torch.exp(-alpha * (sim - base)) * keep_pos).sum(dim=1)) / alpha
+    neg_term = torch.log1p((torch.exp(beta * (sim - base)) * keep_neg).sum(dim=1)) / beta
+    return (pos_term + neg_term).mean()
+
+
+def aux_pair_loss(kind: str, embeddings: torch.Tensor, labels: torch.Tensor,
+                  temperature: float) -> torch.Tensor:
+    """Dispatch the auxiliary in-batch pair loss (``supcon`` | ``ms``)."""
+
+    if kind == "supcon":
+        return supcon_loss(embeddings, labels, temperature)
+    if kind == "ms":
+        return multi_similarity_loss(embeddings, labels)
+    raise ValueError(f"unknown auxiliary loss {kind!r}")

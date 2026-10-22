@@ -36,6 +36,7 @@ class DataConfig:
     cache_dir: str = str(ROOT / "runs" / "cache")
     socofing: bool = True
     socofing_altered: bool = True
+    socofing_drop_variants: tuple[str, ...] = ("CR",)  # alteration types excluded (manifest)
     socofing_split_file: str | None = str(
         ROOT / "benchmarks" / "splits" / "socofing_subject_split_seed0.json"
     )
@@ -73,6 +74,7 @@ class AugConfig:
     noise: float = 0.5
     illumination: float = 0.3
     polarity: float = 0.1
+    anisotropy: float = 0.05  # log-uniform ± axis-scale difference
     frame: float = 0.15  # synthetic sensor-frame edges / bars
     min_print: float = 0.35  # occlusion must keep ≥ this fraction of the print
     gamma: float = 0.5
@@ -100,6 +102,9 @@ class LossConfig:
     subcenters: int = 1
     margin_warmup_epochs: float = 2.0
     adaface_h: float = 0.333
+    aux: str = "none"  # in-batch pair loss on P×K batches: "none" | "supcon" | "ms"
+    aux_weight: float = 0.5
+    aux_temperature: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -108,7 +113,8 @@ class OptimConfig:
 
     epochs: int = 30
     samples_per_epoch: int = 40000
-    batch_size: int = 0  # 0 = automatic probe (largest P*K with peak VRAM <= 80 %)
+    batch_size: int = 96  # requested P*K batch; the VRAM probe lowers it if > 80 % peak
+    skip_probe: bool = False  # trust batch_size without probing (tests / known hardware)
     k: int = 4  # images per identity in a P*K batch
     effective_batch: int = 0  # > batch_size -> gradient accumulation; 0 = no accumulation
     lr: float = 5e-4  # reference LR at lr_ref_batch, rescaled to the effective batch
@@ -117,10 +123,12 @@ class OptimConfig:
     head_lr_mult: float = 10.0
     weight_decay: float = 0.05
     warmup_epochs: float = 1.0
-    ema: float = 0.999
+    ema: float = 0.9995  # EMA with warm-up (timm ModelEmaV3 use_warmup)
     grad_clip: float = 5.0
     divergence_factor: float = 2.0  # abort when the windowed loss exceeds this x its best
     max_nonfinite: int = 20
+    early_stop_patience: int = 3  # evaluations without pooled-val improvement ...
+    early_stop_after: int = 40  # ... counted only after this epoch (0 = never stop early)
 
     def scaled_lr(self, effective_batch: int) -> float:
         """Reference LR rescaled from ``lr_ref_batch`` to ``effective_batch``."""
@@ -151,7 +159,7 @@ class TrainConfig:
     seed: int = 0
     out_dir: str = str(ROOT / "runs" / "embedder")
     input_size: int = 256
-    eval_every: int = 2
+    eval_every: int = 4
     compile: str = "default"  # torch.compile mode or "none"
     log_every: int = 50
     num_threads: int = 8

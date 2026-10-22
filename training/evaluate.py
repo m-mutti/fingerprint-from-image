@@ -71,9 +71,10 @@ def evaluate_checkpoint(checkpoint: Path, *, manifest_dir: Path | None = None,
     if step.is_done() and not force:
         return json.loads((step.path / "results.json").read_text(encoding="utf-8"))
     started = time.time()
-    embed, naive = _torch_embed(checkpoint, device)
-    results = {"fvc2004_db_b": evaluate_sets(embed, FVC_GROUPS["FVC2004"], naive=naive),
-               "fvc2004_full": evaluate_full(embed, naive=naive), "train_key": train_key}
+    embed, naive, size = _torch_embed(checkpoint, device)
+    results = {"fvc2004_db_b": evaluate_sets(embed, FVC_GROUPS["FVC2004"], naive=naive, size=size),
+               "fvc2004_full": evaluate_full(embed, naive=naive, size=size),
+               "train_key": train_key}
     step.path.mkdir(parents=True, exist_ok=True)
     (step.path / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     step.mark_done(inputs, ["results.json"], {"train_key": train_key}, started)

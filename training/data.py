@@ -23,7 +23,7 @@ from PIL import Image
 
 from fingerprint_from_image.embedding import preprocess as pp
 from fingerprint_from_image.io import load_image
-from training.keys import StepDir, canonical_json
+from training.keys import StepDir, canonical_json, file_sha256
 
 __all__ = [
     "Sample",
@@ -184,6 +184,7 @@ def cache_inputs(samples: Sequence[Sample], *, canvas: int, naive: bool) -> dict
         "images_sha256": hashlib.sha256(canonical_json(images).encode()).hexdigest(),
         "n_images": len(samples), "canvas": canvas, "naive": naive,
         "preprocess": pp.PREPROCESS_VERSION, "target_period": pp.TARGET_PERIOD,
+        "preprocess_source_sha256": file_sha256(pp.__file__),
         "socofing_period_inheritance": True,
     }
 
@@ -238,18 +239,18 @@ def build_cache(
     return arrays, step.key
 
 
-def calibration_inputs(n: int = 256, seed: int = 0) -> np.ndarray:
-    """Preprocessed images from the *training* split only (SOCOFing train subjects + FVC2000)."""
+def calibration_inputs(n: int = 256, seed: int = 0, size: int = 256) -> np.ndarray:
+    """Preprocessed images drawn from manifest ``train`` rows only (INT8 calibration).
+
+    Sources: FVC2000/2002 train identities (DB_A) and SOCOFing train subjects (Real).
+    """
 
     from training.config import ROOT
+    from training.manifest import load_rows
 
-    data = ROOT / "data"
-    split = ROOT / "benchmarks" / "splits" / "socofing_subject_split_seed0.json"
-    spec = json.loads(split.read_text(encoding="utf-8"))
-    train_subjects = {f"soco_{s}" for s in spec["subjects"]["train"]}
-    pool: list[Sample] = [s for s in socofing_samples(data) if s.subject in train_subjects]
-    fvc2000 = [f"FVC2000_DB{i}_B" for i in range(1, 5)]
-    pool += fvc_samples(data, fvc2000) * 10  # up-weight the multi-sensor images
+    rows = load_rows(ROOT / "data" / "manifests", ["FVC2000", "FVC2002", "SOCOFing"])
+    pool = [r for r in rows if r["split"] == "train" and r.get("variant", "") == ""]
     rng = np.random.default_rng(seed)
     chosen = [pool[i] for i in rng.choice(len(pool), size=n, replace=False)]
-    return np.stack([model_input(load_gray(s.path, s.source)) for s in chosen])[:, None]
+    return np.stack([model_input(load_gray(r["path"], r["dataset"]), size=size)
+                     for r in chosen])[:, None]

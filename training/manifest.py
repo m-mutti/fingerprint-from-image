@@ -21,6 +21,7 @@ __all__ = [
     "SELECTION_SETS",
     "VAL_SETS",
     "all_pair_scores",
+    "drop_variants",
     "group_of",
     "load_rows",
     "rows_to_samples",
@@ -53,6 +54,14 @@ def load_rows(manifest_dir: Path, groups: Iterable[str]) -> list[dict]:
         with (manifest_dir / f"{group}.jsonl").open(encoding="utf-8") as stream:
             rows += [r for r in map(json.loads, stream) if not r.get("exclude")]
     return rows
+
+
+def drop_variants(rows: Iterable[dict], kinds: Iterable[str]) -> list[dict]:
+    """Remove SOCOFing alteration types (``variant == "altered:<kind>:<level>"``)."""
+
+    banned = {f"altered:{k}:" for k in kinds}
+    return [r for r in rows
+            if not any(r.get("variant", "").startswith(prefix) for prefix in banned)]
 
 
 def rows_to_samples(rows: Iterable[dict], split: str) -> list[Sample]:

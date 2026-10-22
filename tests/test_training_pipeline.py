@@ -181,3 +181,29 @@ def test_evaluation_refuses_unverified_checkpoints(tmp_path: Path,
         monkeypatch.setattr(ev, "_train_record", lambda _, bad=bad: bad)
         with pytest.raises(ContaminationError):
             ev.check_checkpoint(tmp_path / "best.pt", tmp_path)
+
+
+def test_stale_heartbeat_does_not_kill_a_resumed_job(tmp_path: Path) -> None:
+    import os
+    import time
+
+    queue = Queue(tmp_path / "queue")
+    job = queue.submit(name="resumed", argv=["-c", "import time; time.sleep(1.0)"])
+    stale = queue.root / "heartbeat" / f"{job.stem}.hb"
+    stale.write_text("0")
+    old = time.time() - 3600
+    os.utime(stale, (old, old))
+    assert queue.run_one(job, stall_seconds=3, poll=0.2).parent.name == "done"
+
+
+def test_source_digest_tracks_python_content_only(tmp_path: Path) -> None:
+    from training.keys import source_digest
+
+    (tmp_path / "a.py").write_text("x = 1\n")
+    (tmp_path / "notes.md").write_text("doc\n")
+    files = [tmp_path / "a.py"]
+    first = source_digest(files, tmp_path)
+    (tmp_path / "notes.md").write_text("changed doc\n")
+    assert source_digest(files, tmp_path) == first
+    (tmp_path / "a.py").write_text("x = 2\n")
+    assert source_digest(files, tmp_path) != first

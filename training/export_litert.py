@@ -11,8 +11,9 @@ Variants: ``fp32`` (litert-torch), ``fp16`` (FP16 weights via float casting, FP3
 compute), ``int8_dynamic`` (INT8 weights, FP32 activations), ``int8_static``
 (INT8 weights + activations) and ``int8_static_a16`` (INT8 weights, INT16
 activations), both calibrated on training-split images only. Each is
-checked for parity against PyTorch FP32 on held-out FVC2002 images, timed on CPU
-and evaluated on FVC2004 DB1-4 B.
+checked on the manifest val selection sets (parity ≥ 0.99 cosine vs PyTorch FP32, pooled
+val metrics within 10 %), timed on CPU, and only accepted files are evaluated (once) on
+FVC2004 DB1-4 B for reporting.
 """
 
 from __future__ import annotations
@@ -28,8 +29,9 @@ import numpy as np
 import torch
 
 from training.data import calibration_inputs
-from training.eval_fvc import FVC_GROUPS, evaluate_sets, load_fvc_inputs
+from training.eval_fvc import FVC_GROUPS, evaluate_sets
 from training.train_utils import load_model
+from training.validate import selection_validator, torch_embed_fn
 
 __all__ = ["main"]
 
@@ -125,7 +127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     fp32 = args.out / f"{args.prefix}_litert_fp32.tflite"
     if not (args.reuse and fp32.is_file()):
         litert_torch.convert(model, (torch.zeros(1, 1, size, size),)).export(str(fp32))
-    calib = calibration_inputs(args.calib)
+    calib = calibration_inputs(args.calib, size=size)
     variants = {"litert_fp32": fp32}
     for name, recipe_obj, data in (
         ("litert_fp16", _FP16_RECIPE, None),
@@ -143,24 +145,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         except Exception as exc:  # noqa: BLE001 - report and continue with other variants
             print(f"{name}: FAILED {type(exc).__name__}: {exc}")  # noqa: T201
 
-    held_out = np.concatenate([load_fvc_inputs(s)[:16] for s in FVC_GROUPS["FVC2002"]])
-    with torch.no_grad():
-        reference = model(torch.from_numpy(held_out)).numpy()
-    report: dict[str, dict] = {}
+    validator = selection_validator(size)  # choose on val selection sets only
+    ref_emb = np.concatenate(list(validator.embeddings(torch_embed_fn(model)).values()))
+    ref_val, _ = validator(torch_embed_fn(model))
+    report: dict[str, dict] = {"pytorch_fp32": {"val": ref_val}}
     for name, path in variants.items():
         run = _Runner(path, args.threads)
-        out = run(held_out)
-        cos = np.sum(reference * out, axis=1) / (
-            np.linalg.norm(reference, axis=1) * np.linalg.norm(out, axis=1))
+        out = np.concatenate(list(validator.embeddings(run).values()))
+        cos = np.sum(ref_emb * out, axis=1) / (
+            np.linalg.norm(ref_emb, axis=1) * np.linalg.norm(out, axis=1))
+        val, _ = validator(run)
+        ok = (cos.min() >= 0.99 and val["select"] <= ref_val["select"] * 1.10 + 0.05
+              and val["select_eer"] <= ref_val["select_eer"] * 1.10 + 0.05)
         entry = {"file": path.name, "size_mb": round(path.stat().st_size / 1e6, 2),
                  "sha256": _sha256(path),
-                 "parity": {"cos_min": float(cos.min()), "cos_mean": float(cos.mean())},
+                 "parity_val": {"cos_min": float(cos.min()), "cos_mean": float(cos.mean())},
+                 "val": val, "accepted": bool(ok),
                  "ms_b1": _latency(run, size, 1, 20), "ms_b32": _latency(run, size, 32, 2),
-                 "fvc2004": evaluate_sets(run, FVC_GROUPS["FVC2004"]),
                  "runtime": "ai-edge-litert (XNNPACK, WSL2 Linux)"}
+        if ok:  # FVC2004 reported once, only for accepted files
+            entry["fvc2004"] = evaluate_sets(run, FVC_GROUPS["FVC2004"], size=size)
         report[name] = entry
-        print(name, json.dumps({k: v for k, v in entry.items() if k != "fvc2004"}),  # noqa: T201
-              "EER(all) mean", round(entry["fvc2004"]["mean"]["eer_all"], 3))
+        print(name, json.dumps({k: v for k, v in entry.items()  # noqa: T201
+                                if k not in ("fvc2004", "val")}))
     (args.out / f"{args.prefix}_litert_report.json").write_text(json.dumps(report, indent=2))
     return 0
 

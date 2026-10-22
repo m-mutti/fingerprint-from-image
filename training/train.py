@@ -47,23 +47,26 @@ def train_inputs(cfg: TrainConfig, cache_key: str, heldout_digest: str, batch: i
     """Everything that determines the trained weights (the ``train`` content key)."""
 
     config = {k: v for k, v in cfg.to_dict().items() if k not in _VOLATILE}
-    return {"config": config, "cache": cache_key, "code": code_version(),
+    code = code_version()
+    return {"config": config, "cache": cache_key, "code_py_sha256": code["py_sha256"],
             "heldout_digest": heldout_digest, "batch": batch, "accum": accum}
 
 
 def _resolve_batch(cfg: TrainConfig, num_classes: int) -> tuple[int, int, dict | None]:
+    """Requested P×K batch, lowered by the VRAM probe if needed; accumulation covers the gap."""
+
     k = cfg.optim.k
+    requested = max(k, cfg.optim.batch_size - cfg.optim.batch_size % k)
     probe = None
-    batch = cfg.optim.batch_size
-    if batch <= 0:
+    batch = requested
+    if not cfg.optim.skip_probe:
         from training.batch_probe import choose_batch
 
-        probe = choose_batch(cfg, num_classes, k)
+        probe = choose_batch(cfg, num_classes, k, requested)
         if not probe["chosen"]:
             raise RuntimeError(f"no batch size fits the VRAM budget: {probe['table']}")
         batch = probe["chosen"]
-    batch = max(k, batch - batch % k)
-    effective = max(cfg.optim.effective_batch, batch)
+    effective = max(cfg.optim.effective_batch, requested)
     return batch, math.ceil(effective / batch), probe
 
 
@@ -86,15 +89,20 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
     if step.is_done() and not force:
         logger.info("train step %s already done: %s", step.key[:12], step.path)
         return step.path
-    if force:
-        step.invalidate()
     run_dir = step.path
+    if force:  # retrain from scratch: move previous state/checkpoints aside, never resume them
+        step.invalidate()
+        attic = run_dir / "attic" / time.strftime("%Y%m%d_%H%M%S")
+        for name in ("state.pt", "best.pt", "last.pt", "metrics.jsonl", "plots"):
+            if (run_dir / name).exists():
+                attic.mkdir(parents=True, exist_ok=True)
+                (run_dir / name).replace(attic / name)
     setup_logging(run_dir)
     (run_dir.parent.parent / "LATEST").write_text(str(run_dir), encoding="utf-8")
     (run_dir / "config.yaml").write_text(yaml.safe_dump(cfg.to_dict()), encoding="utf-8")
     (run_dir / "environment.json").write_text(json.dumps(environment(), indent=2))
     registry.upsert("train", step.key, "running", name=cfg.name, config=cfg.to_dict(),
-                    git_commit=inputs["code"]["commit"], licence=licence,
+                    git_commit=code_version()["commit"], licence=licence,
                     artifacts={"dir": str(run_dir)})
     logger.info("train %s: images=%d classes=%d batch=%d accum=%d lr=%.2e data=%s val=%s",
                 step.key[:12], len(samples), len(classes), batch, accum,
@@ -107,24 +115,35 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
     heartbeat = Path(os.environ["FFI_HEARTBEAT"]) if os.environ.get("FFI_HEARTBEAT") else None
     trainer = Trainer(cfg, run_dir, data, batch, accum, shares, heartbeat)
     trainer.load_state()
-    validator = Validator(val_sets, naive=cfg.data.naive_resize)
+    validator = Validator(val_sets, naive=cfg.data.naive_resize, size=cfg.input_size)
     try:
         while trainer.epoch < cfg.optim.epochs:
             record = trainer.train_epoch()
             scores: dict = {}
+            stop = False
             if trainer.epoch % cfg.eval_every == 0 or trainer.epoch == cfg.optim.epochs:
                 val, scores = validator(trainer.embed)
+                torch.cuda.empty_cache()
                 record["val"] = val
-                if val["select"] < trainer.best:
-                    trainer.best = val["select"]
+                current = (val["select"], val["select_eer"])
+                if current < trainer.best:
+                    trainer.best, trainer.evals_since_best = current, 0
                     save_checkpoint(run_dir / "best.pt", trainer.ema.module, cfg,
                                     {"epoch": trainer.epoch, "val": val, "train_key": step.key})
+                elif trainer.epoch > cfg.optim.early_stop_after > 0:
+                    trainer.evals_since_best += 1
+                    stop = trainer.evals_since_best >= cfg.optim.early_stop_patience
+                    record["early_stop"] = stop
             save_checkpoint(run_dir / "last.pt", trainer.ema.module, cfg,
                             {"epoch": trainer.epoch, "train_key": step.key})
             trainer.save_state()
             trainer._log(record)
             logger.info(json.dumps(record))
             write_plots(run_dir, scores or None)
+            if stop:
+                logger.info("early stop: no pooled-val improvement in %d evaluations",
+                            cfg.optim.early_stop_patience)
+                break
     except TrainingAborted as exc:
         registry.upsert("train", step.key, "failed", reason=exc.reason)
         raise
@@ -133,12 +152,15 @@ def train(cfg: TrainConfig, *, force: bool = False) -> Path:
         registry.upsert("train", step.key, "failed", reason=f"{reason}: {exc}"[:500])
         raise
     outputs = ["best.pt", "last.pt", "metrics.jsonl"]
-    extra = {"best_val_select": trainer.best, "batch": batch, "accum": accum, "probe": probe,
+    extra = {"best_val": {"select": trainer.best[0], "select_eer": trainer.best[1]},
+             "epochs_run": trainer.epoch, "batch": batch, "accum": accum, "probe": probe,
              "data": stats, "licence": licence, "classes": len(classes)}
     step.mark_done(inputs, outputs, extra, started)
-    registry.upsert("train", step.key, "done", metrics={"val_select": trainer.best},
+    registry.upsert("train", step.key, "done",
+                    metrics={"val_select": trainer.best[0], "val_select_eer": trainer.best[1]},
                     artifacts={"dir": str(run_dir), "best": str(run_dir / "best.pt")})
-    logger.info("best val selection EER = %.3f%% (%s)", trainer.best, run_dir)
+    logger.info("best val: pooled FNMR@FMR0.1%% = %.3f%%, mean EER = %.3f%% (%s)",
+                trainer.best[0], trainer.best[1], run_dir)
     return run_dir
 
 

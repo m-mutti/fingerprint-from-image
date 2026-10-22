@@ -1,10 +1,10 @@
 """Export a checkpoint to ONNX FP32 / ORT-optimised / INT8 (static, dynamic) / FP16.
 
-Each variant is checked for parity (cosine vs the PyTorch FP32 reference on
-held-out FVC2002 images), timed on CPU (batch 1 and 32) and evaluated on
-FVC2004 DB1-4 B. A variant is "accepted" when its mean EER(all) degrades by
-≤ 10 % relative to the ONNX FP32 model. LiteRT files are produced separately
-by ``training/export_litert.py`` (runs under WSL).
+Each variant is checked on the manifest **val** selection sets (contact FVC2000/2002
+DB_B fingers 101-110 + neurotech): parity (cosine vs PyTorch FP32 ≥ 0.99) and the pooled
+val metrics must stay within 10 % of FP32 for the variant to be "accepted". Only then
+is FVC2004 DB1-4 B evaluated, once, for reporting (never for choosing). LiteRT files
+are produced separately by ``training/export_litert.py`` (runs under WSL).
 
 Usage::
 
@@ -24,15 +24,11 @@ import numpy as np
 import onnx
 import torch
 
+from fingerprint_from_image.embedding import preprocess as pp
 from training.data import calibration_inputs
-from training.eval_fvc import (
-    FVC_GROUPS,
-    _onnx_embed,
-    evaluate_sets,
-    latency,
-    load_fvc_inputs,
-)
+from training.eval_fvc import FVC_GROUPS, _onnx_embed, evaluate_sets, latency
 from training.train_utils import load_model
+from training.validate import selection_validator, torch_embed_fn
 
 __all__ = ["export_onnx", "main"]
 
@@ -145,7 +141,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     model, cfg = load_model(args.checkpoint, "cpu")
     size = cfg.input_size
     metadata = {"model_version": args.version, "dim": str(cfg.model.dim),
-                "input_size": str(size), "target_period": "6.0",
+                "input_size": str(size), "target_period": str(pp.TARGET_PERIOD),
+                "preprocess_version": pp.PREPROCESS_VERSION,
                 "backbone": cfg.model.backbone, "license": "CC-BY-NC-SA-4.0 (non-commercial)"}
     fp32 = args.out / f"{args.prefix}_fp32.onnx"
     export_onnx(model, fp32, size, metadata)
@@ -159,7 +156,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "onnx_int8_static_percentile": lambda p: quantize_static(fp32, p, calib, "Percentile"),
         "onnx_int8_static_entropy": lambda p: quantize_static(fp32, p, calib, "Entropy"),
     }
-    calib = calibration_inputs()
+    calib = calibration_inputs(size=size)
     for name, build in builders.items():
         if name in args.skip:
             continue
@@ -167,28 +164,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         build(path)
         variants[name] = path
 
-    held_out = np.concatenate([load_fvc_inputs(s)[:16] for s in FVC_GROUPS["FVC2002"]])
-    with torch.no_grad():
-        reference = model(torch.from_numpy(held_out)).numpy()
-    torch_results = evaluate_sets(lambda x: model(torch.from_numpy(x)).detach().numpy(),
-                                  FVC_GROUPS["FVC2004"])
-    report: dict[str, dict] = {"pytorch_fp32": {"fvc2004": torch_results}}
+    # Choose variants on VAL only (manifest val selection sets); FVC2004 is reported afterwards.
+    validator = selection_validator(size)
+    ref_emb = validator.embeddings(torch_embed_fn(model))
+    ref_val, _ = validator(torch_embed_fn(model))
+    report: dict[str, dict] = {"pytorch_fp32": {"val": ref_val}}
     for name, path in variants.items():
         embed = _onnx_embed(path, args.threads)
-        entry = {"file": path.name, "size_mb": round(path.stat().st_size / 1e6, 2),
-                 "sha256": _sha256(path), "parity": _parity(reference, embed(held_out)),
-                 "ms_b1": latency(embed, size, batch=1),
-                 "ms_b32": latency(embed, size, batch=32, repeats=3),
-                 "fvc2004": evaluate_sets(embed, FVC_GROUPS["FVC2004"])}
-        report[name] = entry
-        print(name, json.dumps({k: v for k, v in entry.items() if k != "fvc2004"}),  # noqa: T201
-              "EER(all) mean", round(entry["fvc2004"]["mean"]["eer_all"], 3))
-    base = report["onnx_fp32"]["fvc2004"]["mean"]["eer_all"]
-    for entry in report.values():
-        if "parity" in entry:
-            eer = entry["fvc2004"]["mean"]["eer_all"]
-            ok = eer <= base * 1.10 + 1e-9 and entry["parity"]["cos_min"] >= 0.99
-            entry["accepted"] = bool(ok)
+        emb = validator.embeddings(embed)
+        val, _ = validator(embed)
+        parity = _parity(np.concatenate(list(ref_emb.values())), np.concatenate(list(emb.values())))
+        ok = (parity["cos_min"] >= 0.99
+              and val["select"] <= ref_val["select"] * 1.10 + 0.05
+              and val["select_eer"] <= ref_val["select_eer"] * 1.10 + 0.05)
+        report[name] = {"file": path.name, "size_mb": round(path.stat().st_size / 1e6, 2),
+                        "sha256": _sha256(path), "parity_val": parity, "val": val,
+                        "accepted": bool(ok), "ms_b1": latency(embed, size, batch=1),
+                        "ms_b32": latency(embed, size, batch=32, repeats=3)}
+        print(name, json.dumps({k: v for k, v in report[name].items() if k != "val"}),  # noqa: T201
+              "val pooled FNMR@0.1%", round(val["select"], 3))
+    report["pytorch_fp32"]["fvc2004"] = evaluate_sets(torch_embed_fn(model), FVC_GROUPS["FVC2004"],
+                                                      size=size)
+    for name, entry in report.items():  # test numbers, computed once per accepted file
+        if entry.get("accepted"):
+            entry["fvc2004"] = evaluate_sets(_onnx_embed(variants[name], args.threads),
+                                             FVC_GROUPS["FVC2004"], size=size)
     (args.out / f"{args.prefix}_export_report.json").write_text(json.dumps(report, indent=2))
     return 0
 
