@@ -12,7 +12,7 @@ translation, contact region, pressure (ridge width), pores, creases and noise.
 
 Usage::
 
-    python -m training.synth --out E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v1 \
+    python -m training.synth --out data/synthetic_v1 \
         --identities 20000 --impressions 2 --seed 0
 """
 

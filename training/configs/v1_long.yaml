@@ -6,7 +6,7 @@ name: v1_long
 data:
   manifest_train: {FVC2000: 0.20, FVC2002: 0.20, l3sf: 0.15, TDFD: 0.05, SOCOFing: 0.25}
   socofing_drop_variants: [CR]
-  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_dir: data/synthetic_v2
   synthetic_weight: 0.15
 aug:
   elastic: 0.06

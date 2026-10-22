@@ -2,7 +2,7 @@
 name: m3_synthv1
 data:
   manifest_train: {SOCOFing: 0.4, FVC2000: 0.225, FVC2002: 0.225}
-  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v1
+  synthetic_dir: data/synthetic_v1
   synthetic_weight: 0.15
 optim:
   epochs: 8

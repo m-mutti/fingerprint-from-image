@@ -35,11 +35,11 @@ PIPELINE_VERSION = "pipeline-v1"
 
 
 def runs_root() -> Path:
-    """``$FFI_RUNS`` or ``<FFI_ROOT>/runs`` (default ``E:/Personal_tries/Mutti_Finger_Prints``)."""
+    """``$FFI_RUNS`` or ``<FFI_ROOT>/runs`` (``FFI_ROOT`` defaults to the repository root)."""
 
     if os.environ.get("FFI_RUNS"):
         return Path(os.environ["FFI_RUNS"])
-    root = Path(os.environ.get("FFI_ROOT", "E:/Personal_tries/Mutti_Finger_Prints"))
+    root = Path(os.environ.get("FFI_ROOT", Path(__file__).resolve().parents[1]))
     return root / "runs"
 
 

@@ -1,7 +1,7 @@
 # Ablation: + 20k synthetic identities (training/synth.py, seed 0), 40% of each epoch.
 name: abl_synth
 data:
-  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v1
+  synthetic_dir: data/synthetic_v1
   synthetic_weight: 0.4
 optim:
   epochs: 10

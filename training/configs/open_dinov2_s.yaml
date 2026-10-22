@@ -8,7 +8,7 @@ model:
   backbone: vit_small_patch14_reg4_dinov2.lvd142m
 data:
   manifest_train: {l3sf: 0.4}
-  synthetic_dir: E:/Personal_tries/Mutti_Finger_Prints/data/synthetic_v2
+  synthetic_dir: data/synthetic_v2
   synthetic_weight: 0.6
 loss:
   aux: supcon

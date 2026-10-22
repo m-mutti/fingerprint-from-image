@@ -24,7 +24,8 @@ __all__ = [
     "load_config",
 ]
 
-ROOT = Path(os.environ.get("FFI_ROOT", "E:/Personal_tries/Mutti_Finger_Prints"))
+# Repository root by default; override with $FFI_ROOT (e.g. when data lives elsewhere).
+ROOT = Path(os.environ.get("FFI_ROOT", Path(__file__).resolve().parents[1]))
 
 
 @dataclass(frozen=True)

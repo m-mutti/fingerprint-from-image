@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from training.config import TrainConfig
+from training.config import ROOT, TrainConfig
 from training.content import digest, pixel_hashes
 from training.data import Sample, fvc_samples, socofing_samples, split_from_file, split_socofing
 from training.dedup import dedup_socofing, duplicate_groups
@@ -93,7 +93,9 @@ def gather(cfg: TrainConfig) -> tuple[list[Sample], dict[str, list[Sample]], dic
     else:
         train, stats = _legacy(cfg)
     if cfg.data.synthetic_dir:
-        train += synthetic_samples(Path(cfg.data.synthetic_dir))
+        synthetic = Path(cfg.data.synthetic_dir)
+        # Relative paths in configs are resolved against the repository root.
+        train += synthetic_samples(synthetic if synthetic.is_absolute() else ROOT / synthetic)
     heldout_rows = load_rows(manifest_dir, HELDOUT_MANIFESTS)
     heldout = heldout_from_rows(heldout_rows)
     sha_of = {s.path: s.sha256 for s in train if s.sha256}
