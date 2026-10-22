@@ -1,0 +1,176 @@
+{
+ "scorer": {
+  "name": "sourceafis",
+  "implementation": "SourceAFIS .NET 3.14.0 (NuGet), raw-pixel input",
+  "score": "FingerprintMatcher(probe=reference).Match(candidate=probe image)"
+ },
+ "environment": {
+  "timestamp": "2026-10-22T07:43:22+00:00",
+  "package_version": "2.0.0.dev0",
+  "python": "3.12.13",
+  "numpy": "2.5.4",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+  "cpu_count": 20,
+  "git_commit": "eeb9175995f59ea19a6affa50a2ff068719535b5"
+ },
+ "impostor_protocol": "all",
+ "sets": [
+  {
+   "set": "FVC2000_DB1_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.02857142857142857,
+   "enroll_ms_per_image": 23.86218227848101,
+   "compare_us_per_pair": 1593.68740107629,
+   "eer_all": 0.039285714285714285,
+   "fmr100_all": 0.04642857142857143,
+   "fmr1000_all": 0.08928571428571429,
+   "zero_fmr_all": 0.09642857142857143,
+   "rank1": 0.9285714285714286
+  },
+  {
+   "set": "FVC2000_DB2_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.1111111111111111,
+   "enroll_ms_per_image": 28.1687670886076,
+   "compare_us_per_pair": 3105.5806900918005,
+   "eer_all": 0.11428571428571428,
+   "fmr100_all": 0.14285714285714285,
+   "fmr1000_all": 0.23214285714285715,
+   "zero_fmr_all": 0.24285714285714285,
+   "rank1": 0.8714285714285714
+  },
+  {
+   "set": "FVC2000_DB3_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.18571428571428572,
+   "enroll_ms_per_image": 50.44516075949367,
+   "compare_us_per_pair": 18374.247135169357,
+   "eer_all": 0.171875,
+   "fmr100_all": 0.25,
+   "fmr1000_all": 0.33214285714285713,
+   "zero_fmr_all": 0.35714285714285715,
+   "rank1": 0.8285714285714286
+  },
+  {
+   "set": "FVC2000_DB4_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.06666666666666667,
+   "enroll_ms_per_image": 16.44798101265823,
+   "compare_us_per_pair": 932.8198163975941,
+   "eer_all": 0.06785714285714285,
+   "fmr100_all": 0.10714285714285714,
+   "fmr1000_all": 0.16428571428571428,
+   "zero_fmr_all": 0.19285714285714287,
+   "rank1": 0.9857142857142858
+  },
+  {
+   "set": "FVC2002_DB1_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.02857142857142857,
+   "enroll_ms_per_image": 26.2290164556962,
+   "compare_us_per_pair": 2536.3886672997783,
+   "eer_all": 0.03125,
+   "fmr100_all": 0.03214285714285714,
+   "fmr1000_all": 0.05714285714285714,
+   "zero_fmr_all": 0.060714285714285714,
+   "rank1": 1.0
+  },
+  {
+   "set": "FVC2002_DB2_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.010714285714285714,
+   "enroll_ms_per_image": 27.054696202531645,
+   "compare_us_per_pair": 4005.188129154796,
+   "eer_all": 0.015625,
+   "fmr100_all": 0.017857142857142856,
+   "fmr1000_all": 0.03571428571428571,
+   "zero_fmr_all": 0.03571428571428571,
+   "rank1": 0.9857142857142858
+  },
+  {
+   "set": "FVC2002_DB3_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.11785714285714285,
+   "enroll_ms_per_image": 22.028908860759493,
+   "compare_us_per_pair": 1087.1197214308327,
+   "eer_all": 0.11785714285714285,
+   "fmr100_all": 0.18571428571428572,
+   "fmr1000_all": 0.2642857142857143,
+   "zero_fmr_all": 0.31785714285714284,
+   "rank1": 0.8857142857142857
+  },
+  {
+   "set": "FVC2002_DB4_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.05714285714285714,
+   "enroll_ms_per_image": 21.570632911392405,
+   "compare_us_per_pair": 1025.3408990186767,
+   "eer_all": 0.0642361111111111,
+   "fmr100_all": 0.10357142857142858,
+   "fmr1000_all": 0.19642857142857142,
+   "zero_fmr_all": 0.20357142857142857,
+   "rank1": 0.8857142857142857
+  },
+  {
+   "set": "FVC2004_DB1_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.09285714285714286,
+   "enroll_ms_per_image": 35.14108860759494,
+   "compare_us_per_pair": 3207.1490345045895,
+   "eer_all": 0.09285714285714286,
+   "fmr100_all": 0.17142857142857143,
+   "fmr1000_all": 0.22142857142857142,
+   "zero_fmr_all": 0.23214285714285715,
+   "rank1": 0.9
+  },
+  {
+   "set": "FVC2004_DB2_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.14642857142857144,
+   "enroll_ms_per_image": 28.58310759493671,
+   "compare_us_per_pair": 2920.5546691991135,
+   "eer_all": 0.125,
+   "fmr100_all": 0.17857142857142858,
+   "fmr1000_all": 0.225,
+   "zero_fmr_all": 0.24285714285714285,
+   "rank1": 0.8857142857142857
+  },
+  {
+   "set": "FVC2004_DB3_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.06428571428571428,
+   "enroll_ms_per_image": 31.410513924050633,
+   "compare_us_per_pair": 7800.357676479899,
+   "eer_all": 0.05357142857142857,
+   "fmr100_all": 0.07142857142857142,
+   "fmr1000_all": 0.08928571428571429,
+   "zero_fmr_all": 0.15,
+   "rank1": 0.9714285714285714
+  },
+  {
+   "set": "FVC2004_DB4_B",
+   "fte_rate": 0.0,
+   "eer_fvc_protocol": 0.04642857142857143,
+   "enroll_ms_per_image": 21.99459240506329,
+   "compare_us_per_pair": 3661.422443811333,
+   "eer_all": 0.04642857142857143,
+   "fmr100_all": 0.05714285714285714,
+   "fmr1000_all": 0.07142857142857142,
+   "zero_fmr_all": 0.07857142857142857,
+   "rank1": 0.9428571428571428
+  }
+ ],
+ "average": {
+  "set": "Average",
+  "fte_rate": 0.0,
+  "eer_fvc_protocol": 0.0796957671957672,
+  "enroll_ms_per_image": 27.744720675105487,
+  "compare_us_per_pair": 4187.488023636171,
+  "eer_all": 0.07834408068783068,
+  "fmr100_all": 0.11369047619047619,
+  "fmr1000_all": 0.16488095238095238,
+  "zero_fmr_all": 0.1842261904761905,
+  "rank1": 0.9226190476190478
+ }
+}
